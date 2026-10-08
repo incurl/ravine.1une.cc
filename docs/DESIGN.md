@@ -20,6 +20,27 @@ The intended reader is a complete novice. If you are an experienced embedded eng
 
 ---
 
+## 0.5. Naming: Phoenix and Ember
+
+This project ships two artifacts that are versioned and named independently:
+
+- **Firmware codename: `Phoenix`.** The software that runs on the ESP32-S3.
+  The full product name on the website, in commit messages, and in this
+  document is **Ravine: Phoenix** ("Ravine" is the project brand; "Phoenix"
+  is the firmware release).
+- **Hardware codename: `Ember`.** The reference PCB and bill of materials
+  described in `hardware/HARDWARE.md`. A board that conforms to the Ember
+  pin map can flash and run Phoenix without changes.
+
+So when you see "Phoenix" in a firmware context (build flags, version
+strings, the AMY bridge, the UI boot screen) it refers to the software,
+and when you see "Ember" it refers to the board. The two are coupled
+through `main/config.h`: Phoenix's pin assignments are the Ember
+reference. Building Phoenix against a different board requires editing
+that file.
+
+---
+
 ## 1. The thirty-second explanation
 
 ### 1.1 What is the PO-33 K.O! Pocket Operator?
