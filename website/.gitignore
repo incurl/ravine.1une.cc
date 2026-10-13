@@ -6,4 +6,3 @@ package-lock.json
 
 # Real firmware binaries (placeholders are committed; real ones are large)
 public/firmware/*.bin
-!public/firmware/.gitkeep

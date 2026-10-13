@@ -84,3 +84,21 @@ __pycache__/
 
 # Vendored AMY sources (fetch with components/amy/README.md instructions)
 components/amy/src/
+
+# In-progress / untracked work that isn't part of the firmware release yet.
+# These are kept on disk for reference but should not be committed without
+# explicit intent. Remove these lines if/when the work lands.
+#
+#   pb/       PocketBase Go backend for an unused "Community" feature
+#             (untracked; never committed).
+#   scripts/  Caddy + supervisord deployment config for the same.
+#   docs/Make_Electronic_Music.md
+#   docs/Music_Theory_for_Computer_Musicians.md
+#   docs/Music_Theory_for_Electronic_Music_Pro.md
+#             Third-party scanned book content (visible COURSE TECHNOLOGY
+#             watermarks). Reference material, not firmware project docs.
+pb/
+scripts/
+docs/Make_Electronic_Music.md
+docs/Music_Theory_for_Computer_Musicians.md
+docs/Music_Theory_for_Electronic_Music_Pro.md
