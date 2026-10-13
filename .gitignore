@@ -75,7 +75,19 @@ sdkconfig.old
 managed_components/
 dependencies.lock
 .cache/
-.vscode/
+# We track specific files in .vscode/ (the IDE config we ship to all
+# contributors) and leave the rest untracked (per-user launch configs,
+# snippets, keybindings, etc.). The pattern below ignores *everything*
+# in .vscode/ and then re-includes the four shared files. The `!/` in
+# the negation patterns is required: without it, the negation would
+# be relative-to-anywhere and could be defeated by another rule.
+#
+# If you add a new shared file to .vscode/, add its name below.
+.vscode/*
+!/.vscode/tasks.json
+!/.vscode/settings.json
+!/.vscode/extensions.json
+!/.vscode/c_cpp_properties.json
 .idea/
 
 # python

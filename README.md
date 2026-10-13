@@ -54,6 +54,10 @@ for the static-site-generator decision.
 
 ## 🏗️ Build
 
+The project ships IDE configs for **CLion** and **VS Code**; both go
+through the same `tools/build.sh` wrapper, which sources the ESP-IDF
+v6.1 `export.sh` for you. If you just want a CLI build:
+
 ```bash
 # 1. ESP-IDF v6.1
 git clone --recursive https://github.com/espressif/esp-idf.git -b v6.1
@@ -64,12 +68,20 @@ git clone --depth 1 https://github.com/shorepine/amy.git /tmp/amy
 cp -r /tmp/amy/src/* components/amy/src/
 rm -rf /tmp/amy
 
-# 3. Build / flash
-idf.py set-target esp32s3
-idf.py menuconfig   # verify PSRAM, 240 MHz, I2S new API
-idf.py build
-idf.py -p /dev/ttyUSB0 flash monitor
+# 3. Build / flash (CLI)
+cd /path/to/ravine.1une.cc
+./tools/build.sh build                    # or just: idf.py build
+./tools/build.sh -p /dev/ttyUSB0 flash    # or: idf.py -p ... flash
+./tools/build.sh monitor                  # or: idf.py monitor
 ```
+
+**IDEs:**
+- **CLion** — see `tools/clion-setup.md`. Two options: the official
+  ESP-IDF plugin (one-click build / flash / monitor), or plain CMake
+  with the project's `tools/build.sh` as a Shell Script run config.
+- **VS Code** — install the recommended extensions (`.vscode/extensions.json`),
+  then run the **Build firmware** task (Ctrl+Shift+B). The task list
+  covers build / clean / menuconfig / flash / monitor / size report.
 
 `components/amy/CMakeLists.txt` adds the platform flags needed for ESP32-S3:
 

@@ -1,0 +1,17 @@
+{
+  "recommendations": [
+    "espressif.esp-idf-web",
+    "ms-vscode.cpptools",
+    "ms-vscode.cmake-tools"
+  ],
+  "unwantedRecommendations": [
+    "ms-dotnettools.csharp"
+  ],
+  "comment": [
+    "espressif.esp-idf-web is the official ESP-IDF extension (formerly the",
+    "ESP-IDF: Espressif extension). It bundles CMake configuration, the",
+    "idf.py task list, build / flash / monitor, and menuconfig UI in a",
+    "sidebar. ms-vscode.cpptools and ms-vscode.cmake-tools are the base",
+    "tooling it relies on for code insight and CMake config."
+  ]
+}

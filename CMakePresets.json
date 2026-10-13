@@ -1,0 +1,61 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 24,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "default",
+      "displayName": "ESP-IDF v6.1 default (ESP32-S3)",
+      "description": "Development build. Uses sdkconfig.defaults from the project root. The build/ directory is shared with `idf.py build` (run via tools/build.sh) so CMake re-runs inside the same cache as the CLI toolchain. Set IDF_PATH in your CLion CMake profile environment (see tools/clion-setup.md). It is intentionally NOT set here because the path is per-machine.",
+      "generator": "Ninja",
+      "binaryDir": "build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "SDKCONFIG_DEFAULTS": "sdkconfig.defaults",
+        "EXTRA_CFLAGS": "-Wall -Werror=comment -Werror=int-conversion"
+      },
+      "environment": {
+        "IDF_PATH_FORCE": "1"
+      },
+      "warnings": {
+        "dev": false,
+        "deprecated": true
+      }
+    },
+    {
+      "name": "release",
+      "displayName": "ESP-IDF v6.1 release",
+      "description": "Release / size-optimized build. Same toolchain as default but with -O2 and assertions off. Pick this when you're measuring firmware size against the 3 MB factory partition.",
+      "inherits": "default",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "EXTRA_CFLAGS": "-O2 -Werror=comment -Werror=int-conversion"
+      }
+    },
+    {
+      "name": "size-analysis",
+      "displayName": "ESP-IDF v6.1 size analysis",
+      "description": "Size-optimized for accurate size measurement. Use with `idf.py size` or `idf.py size-components` after build to see what's eating the flash budget.",
+      "inherits": "default",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "EXTRA_CFLAGS": "-Os -Werror=comment -Werror=int-conversion"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "default",
+      "configurePreset": "default",
+      "targets": ["all"]
+    },
+    {
+      "name": "release",
+      "configurePreset": "release",
+      "targets": ["all"]
+    }
+  ]
+}

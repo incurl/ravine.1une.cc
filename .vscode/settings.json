@@ -1,0 +1,54 @@
+{
+  "files.associations": {
+    "*.h": "c",
+    "sdkconfig.h": "c",
+    "freertos/FreeRTOS.h": "c"
+  },
+  "C_Cpp.default.compilerPath": "/usr/bin/gcc",
+  "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+  "C_Cpp.default.cppStandard": "c++17",
+  "C_Cpp.default.cStandard": "c11",
+
+  "cmake.sourceDirectory": "${workspaceFolder}",
+  "cmake.configureOnOpen": false,
+  "cmake.preferredGenerators": ["Ninja"],
+  "cmake.buildDirectory": "${workspaceFolder}/build",
+
+  "idf.port": "/dev/ttyUSB0",
+  "idf.baudRate": 460800,
+  "idf.flashType": "UART",
+  "idf.buildBeforeFlash": true,
+  "idf.pythonBinPath": "${env:IDF_PYTHON_ENV_PATH}/bin/python",
+
+  "terminal.integrated.cwd": "${workspaceFolder}",
+  "terminal.integrated.env.linux": {
+    "PYTHONUNBUFFERED": "1"
+  },
+  "files.eol": "\n",
+  "editor.tabSize": 4,
+  "editor.insertSpaces": true,
+  "editor.detectIndentation": false,
+
+  "search.exclude": {
+    "build/": true,
+    "managed_components/": true,
+    "dependencies.lock": true,
+    "**/sdkconfig": true,
+    "**/sdkconfig.old": true,
+    "**/.idf_component_state": true
+  },
+
+  "files.watcherExclude": {
+    "**/build/**": true,
+    "**/managed_components/**": true,
+    "**/node_modules/**": true,
+    "**/website/_site/**": true
+  },
+
+  "comment": [
+    "Settings common to all contributors. The idf.* keys drive the",
+    "espressif.esp-idf-web extension's build / flash / monitor UI.",
+    "If you only have the basic CMake + C/C++ extensions installed,",
+    "the idf.* keys are silently ignored."
+  ]
+}

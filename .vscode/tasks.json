@@ -1,0 +1,129 @@
+{
+  "version": "2.0.0",
+  "_comment": "Tasks for building / flashing / monitoring the ravine.1une.cc ESP32-S3 firmware. All tasks go through tools/build.sh, which sources ESP-IDF v6.1's export.sh in a subshell and forwards args to idf.py. The same task definitions are exposed in CLion via tools/clion-setup.md Method B.",
+
+  "options": {
+    "cwd": "${workspaceFolder}",
+    "shell": {
+      "executable": "/bin/bash",
+      "args": ["-lc"]
+    },
+    "env": {
+      "PYTHONUNBUFFERED": "1"
+    }
+  },
+
+  "tasks": [
+    {
+      "label": "Build firmware",
+      "type": "shell",
+      "command": "./tools/build.sh build",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": ["$gcc"],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": false
+      },
+      "detail": "idf.py build (incremental). Output: build/esp32_po33_ko.bin (~995 KB / 68% of 3 MB factory partition)."
+    },
+    {
+      "label": "Clean build",
+      "type": "shell",
+      "command": "./tools/build.sh fullclean && ./tools/build.sh build",
+      "problemMatcher": ["$gcc"],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "detail": "Wipe build/ and rebuild from scratch. Use when sdkconfig.defaults changes or after migrating to a new IDF major version."
+    },
+    {
+      "label": "Menuconfig",
+      "type": "shell",
+      "command": "./tools/build.sh menuconfig",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "detail": "TUI to edit sdkconfig values. Save the new sdkconfig (in build/ or project root) into sdkconfig.defaults if you want the change to stick across fullclean."
+    },
+    {
+      "label": "Set ESP32-S3 fuses (one-time)",
+      "type": "shell",
+      "command": "./tools/build.sh --idf-path=${env:IDF_PATH} esp32s3-fuses",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "detail": "One-time per-board fuse burn (e.g. 16 MB flash, 80 MHz octal). NOT for everyday development; you only do this when provisioning a new board."
+    },
+    {
+      "label": "Flash firmware",
+      "type": "shell",
+      "command": "./tools/build.sh -p ${input:serialPort} flash",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "detail": "Build + write to the connected ESP32-S3. You will be prompted for the serial port (default /dev/ttyUSB0 on Linux, /dev/cu.usbserial-* on macOS, COM7 on Windows)."
+    },
+    {
+      "label": "Monitor serial output",
+      "type": "shell",
+      "command": "./tools/build.sh -p ${input:serialPort} monitor",
+      "problemMatcher": [],
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "detail": "Open the serial monitor. Ctrl-] to exit."
+    },
+    {
+      "label": "Build + flash + monitor",
+      "dependsOrder": "sequence",
+      "dependsOn": ["Build firmware", "Flash firmware", "Monitor serial output"],
+      "problemMatcher": [],
+      "detail": "Convenience pipeline. Run all three in order."
+    },
+    {
+      "label": "Firmware size report",
+      "type": "shell",
+      "command": "./tools/build.sh size && ./tools/build.sh size-components",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "detail": "Print a per-symbol size summary. Useful for keeping the firmware below the 3 MB factory partition limit."
+    },
+    {
+      "label": "Install ESP-IDF v6.1 (EIM)",
+      "type": "shell",
+      "command": "[ -d \"$HOME/.espressif/v6.1/esp-idf\" ] && echo \"IDF v6.1 already installed at $HOME/.espressif/v6.1/esp-idf\" || (echo \"Run the EIM installer: https://dl.espressif.com/dl/esp-idf/\" && echo \"Pick v6.1 + ESP32-S3 target. This task is a placeholder; it does not actually invoke the installer.\" && exit 1)",
+      "problemMatcher": [],
+      "detail": "Stub task. The real installer is interactive; run it from a terminal once per machine. See tools/clion-setup.md for the script-based equivalent."
+    }
+  ],
+
+  "inputs": [
+    {
+      "id": "serialPort",
+      "type": "promptString",
+      "description": "Serial port for the ESP32-S3",
+      "default": "/dev/ttyUSB0",
+      "options": [
+        "/dev/ttyUSB0",
+        "/dev/ttyUSB1",
+        "/dev/cu.usbserial-0001"
+      ]
+    }
+  ]
+}
