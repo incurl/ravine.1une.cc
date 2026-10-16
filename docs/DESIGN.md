@@ -2,6 +2,11 @@
 
 > **Audience:** written for a complete novice on both programming and music production. Every technical term is defined inline the first time it appears, and again in the glossary at the end. If you have never used a Pocket Operator before, start at §1 and read straight through. If you already know the PO-33 and just want to see how we mapped it to code, jump to §3.
 
+**Version:** 1.0
+**Date:** 2026-10-17
+
+> **Terminology convention used in this document.** Throughout, **"ESP32-S3 PO-33 remake"** (or simply **"the device"**, **"the remake"**) refers to *this* project — the open-source firmware running on the ESP32-S3 board described in §1.4. **"Original PO-33"** / **"Teenage Engineering PO-33"** / **"real PO-33"** refers to the manufactured hardware product. Where the unqualified word "PO-33" appears in the existing text, it is preserved for stability; new content in §14 onwards uses the disambiguating forms.  [ADDED: terminology convention introduced so that the new §14 and any future revisions can refer unambiguously to the ESP32-S3 remake vs. the original Teenage Engineering PO-33.]
+
 ---
 
 ## 0. What this document is, and who it is for
@@ -141,7 +146,7 @@ There are **2 analog knobs**, also called "Knob A" and "Knob B" (just like the P
 Once you have read §1, you have a mental model of the device. There are three things you might want to do next, and the rest of this document supports all three:
 
 - **Build the device.** Go to the [project website](https://ravine.1une.cc), where you can flash our firmware onto your board with one click in Chrome / Edge / Firefox over USB. The *Hardware* page there gives a full bill of materials and pin map.
-- **Read the rest of this document.** §2 covers every term used in the project. §3 maps every PO-33 feature to a piece of code with an honest done / partial / missing status. §10 explains how our hardware can break the PO-33's limits. §11 is the v2 proposal for multi-**sketch** storage & restore (we call the unit a "sketch" rather than "song"). §12 is a cliff's-notes reading guide for the *Make: Electronic Music from Scratch* book. §13 is a glossary.
+- **Read the rest of this document.** §2 covers every term used in the project. §3 maps every PO-33 feature to a piece of code with an honest done / partial / missing status. §10 explains how our hardware can break the PO-33's limits. §11 is the v2 proposal for multi-**sketch** storage & restore (we call the unit a "sketch" rather than "song"). §12 is a cliff's-notes reading guide for the *Make: Electronic Music from Scratch* book. §14 is the optional Wi-Fi, web-binding, and sketch-upload design (ESP32-S3 PO-33 remake). §15 is a glossary.  [UPDATED: §13 → §15 renumbering propagated from the §14 insertion; §14 added to the list of forward-reading pointers.]
 - **Read the source.** The repo at the [project URL](https://ravine.1une.cc) (or wherever you got this document) is roughly 3,500 lines of C across `main/audio`, `main/sequencer`, `main/ui`, `main/storage`, `main/system`, and `main/tests`. The audio engine is entirely in the vendored AMY library.
 
 If you are a complete novice, the recommended order is: §2 (concepts) → §3.1 (recording) → §5 (workflows) → build it → §10 (breaking limits) → §11 (multi-sketch) → §12 (the book).
@@ -1212,7 +1217,7 @@ A printable one-page reference. **P** = press, **H+P** = hold while pressing, **
 
 ### Q: Does it work with a real PO-33?
 
-**A:** Partial. The 3.5 mm sync protocol is not yet implemented, so two of our boards can sync to each other, but ours cannot sync to a real PO-33. We share the same audio sample rates (44.1 kHz) so once we implement data transfer (F-028), the two devices should be able to exchange sounds and patterns.
+**A:** Partial. The 3.5 mm sync protocol is not yet implemented, so two ESP32-S3 PO-33 remake boards can sync to each other, but the remake cannot sync to an **original Teenage Engineering PO-33**. The remake and the original PO-33 share the same audio sample rates (44.1 kHz), so once we implement data transfer (F-028) the two should be able to exchange sounds and patterns.  [UPDATED: clarified "our boards" → "ESP32-S3 PO-33 remake boards" and "real PO-33" → "original Teenage Engineering PO-33" for terminology consistency with §14.]
 
 ### Q: Can I plug headphones in?
 
@@ -1978,7 +1983,284 @@ If you read the book and feel the urge to make your own instrument instead of (o
 
 ---
 
-## 13. Glossary
+## 14. Wi-Fi, web binding, and sketch upload (community integration)
+
+> **Why this section exists.** Sections 1–13 describe the *device* in isolation: the ESP32-S3 PO-33 remake, its recorder, sequencer, screen, and on-flash storage. This section extends that picture to cover the *optional* web community: how the device pairs with a user account on a website, how sketches get uploaded from the device to the cloud, and how that sketch is later edited and published by the user. None of this is required for the device to work as a standalone Pocket Operator — it only matters to owners who want to share their work on the web community. Conventions used in this section follow the terminology block at the top of the document (immediately under the H1).
+
+### 14.0 Scope and non-goals
+
+In scope:
+
+- Wi-Fi provisioning flow on the ESP32-S3 PO-33 remake.
+- Binding the device to a user account using **RFC 8628 — Device Authorization Grant**.
+- Sketch upload: payload format, Ed25519 mandatory signing, the canonical-JSON rules the firmware and server agree on byte-for-byte, and the on-device key store.
+- Lifecycle of an uploaded sketch on the server: **draft / published**, including private-by-default.
+- Unbinding and admin revocation, including history preservation.
+
+Explicit non-goals:
+
+- The website's authentication system, its database schema, its UI, or its API beyond the surface the device needs. Those live in the website repo.
+- An audio streaming or low-latency live-audio playback protocol. Sketch uploads are file transfer; the device does not act as a network audio source.
+- A sync protocol to the original PO-33. That remains the §3.10 (jam sync) path.
+
+### 14.1 Who needs to bind a device — and who does not
+
+Binding a device is **optional** for community membership. The web community does not require a device at all, and it does not require that *this* user owns a remake.
+
+A user account can do everything listed below **without ever binding a device**, by interacting only with the website:
+
+- Register and sign in (email + password, OIDC, etc.).
+- Browse, search, and listen to other members' published sketches.
+- Comment, like, collect, and follow other members.
+- Download sketches as files, then transfer them to a device by the means described in §3.9 (USB-MSD, or the future data-transfer protocol).
+- Manually upload a sketch file from the laptop, signed by an *external* key generated on that laptop.
+
+A user account needs to **bind a device** only when the *device itself* must upload sketches directly — i.e. when the user wants to press "Upload to community" on the TFT and have the sketch land in their account on the website without going through a laptop. A user with an **original Teenage Engineering PO-33** therefore has no need to bind anything; they participate as a regular community member.  [ADDED: clarifies that binding is optional and reserved for device-initiated uploads; original-PO-33 owners and device-less users are full citizens of the community.]
+
+### 14.2 Cardinality
+
+The binding relationship is **one user ↔ many devices**, **one device ↔ one user**:
+
+- A single user account may bind **N ≥ 1** ESP32-S3 PO-33 remake units. There is no per-user cap in v1. Each device gets its own device code, its own device_id, its own Ed25519 keypair, and its own access_token.
+- A single device is bound to **at most one** user account at any moment. The (device_id, owner_user_id) pair is unique.
+- **Rebinding** (moving a device from one account to another, including the same account logging out and a different account logging in on the *same* device) requires an explicit unbind or an admin revoke first. The device refuses new binding requests while it holds a valid access_token from any user.
+
+The cardinality is enforced on the server. The device stores only its current `binding_state ∈ {IDLE, BOUND}` and, when bound, its `access_token` and `owner_user_id`; it does not need to know about other devices on the same account.  [ADDED: cardinality subsection — 1 user → N devices, 1 device → 1 user, rebind requires unbind.]
+
+### 14.3 Binding protocol — RFC 8628 Device Authorization Grant
+
+The device binds to a user account using the **OAuth 2.0 Device Authorization Grant** defined in **RFC 8628** ([datatracker.ietf.org/doc/html/rfc8628](https://datatracker.ietf.org/doc/html/rfc8628)). The grant is the right one for input-constrained devices because the device has no keyboard and no browser — only a small screen and a few buttons — so a redirect-based flow is impossible.
+
+#### 14.3.1 State machine
+
+The device's binding state machine is closed and finite:
+
+```
+                  ┌────────────┐
+                  │ DEVICE_IDLE│
+                  └─────┬──────┘
+                        │ user triggers "Bind device"
+                        │ from the TFT menu
+                        ▼
+            ┌───────────────────────┐
+            │ AUTHORIZE_REQUEST     │
+            │  POST /oauth/device   │
+            │  /authorization       │
+            └─────┬─────────┬───────┘
+                  │         │
+       4xx err ◄──┘         └──► 200 {device_code,
+                                    user_code,
+                                    verification_uri,
+                                    verification_uri_complete,
+                                    expires_in,
+                                    interval}
+                  │
+                  ▼
+            ┌──────────────────┐
+            │  SHOW_QRCODE     │
+            │  render QR + show│
+            │  user_code as    │
+            │  fallback text   │
+            └─────┬────────┬───┘
+                  │        │
+        user ◄────┘        └──► user_code typed in
+        scans QR               browser by hand
+        on phone                  │
+                  │              │
+                  ▼              ▼
+            ┌──────────────────────────┐
+            │       POLLING            │
+            │ POST /oauth/token        │
+            │  grant_type=urn:ietf:params:oauth:grant-type:device_code
+            │  device_code=…           │
+            │  (respect `interval`)    │
+            └─────┬───────────┬────────┘
+                  │           │
+                  ▼           ▼
+              BOUND         IDLE
+        store access_token  discard codes
+        POST /v1/devices/   reset state
+        public-key (see
+        §14.4)
+```
+
+The five end states the firmware cares about are explicitly: **`DEVICE_IDLE`**, **`AUTHORIZE_REQUEST`**, **`SHOW_QRCODE`**, **`POLLING`**, **`BOUND`**. Backoff transitions during polling are part of `POLLING` and do not change the state label.  [ADDED: RFC 8628 binding flow with explicit state machine DEVICE_IDLE → AUTHORIZE_REQUEST → SHOW_QRCODE → POLLING → BOUND/IDLE.]
+
+#### 14.3.2 QR code — primary path
+
+While in `SHOW_QRCODE`, the device renders the **`verification_uri_complete`** (an RFC 8628 extension that already encodes the `user_code` into the URL) as a **QR code** on the 240×320 TFT. The user scans the code with the phone's camera, which opens the URL with the code pre-filled; the phone then asks the user to sign in and approve the device. This is the primary path because it eliminates typing on the phone — the user only has to tap "approve" once.  [ADDED: QR-code rendering on the TFT is the primary binding path.]
+
+#### 14.3.3 Manual `user_code` entry — fallback
+
+If the user's phone cannot scan the QR code (broken camera, screen damaged, on a desktop), the same TFT screen also displays the human-readable **`user_code`** as text. The user opens the bare **`verification_uri`** in any browser, types the `user_code`, and continues. The fallback is a documented degradation, not an error path.  [ADDED: manual user_code fallback explicitly documented alongside QR primary path.]
+
+#### 14.3.4 Polling error codes
+
+While in `POLLING`, the device POSTs to `/oauth/token` every `interval` seconds (default 5; the server may lengthen it via the `slow_down` response). The firmware must handle exactly these four RFC 8628 error responses:
+
+| `error` value | Meaning | Device action |
+|---|---|---|
+| `authorization_pending` | The user has not yet approved; keep polling. | Continue at the current `interval`. |
+| `slow_down` | The client is polling too fast. | Back off — set `interval := max(interval, min_interval) + jitter` (RFC 8628 §3.5 recommends ≥ 5 s extra). Then continue polling at the new interval. |
+| `access_denied` | The user rejected the request at the website. | Transition to `DEVICE_IDLE`, show "Binding cancelled", discard `device_code` and `user_code`, return to the menu. |
+| `expired_token` | The `device_code` has expired (server's `expires_in` passed). | Transition to `DEVICE_IDLE`, show "Code expired — try again", delete the codes. The user can re-trigger binding from the menu. |
+
+Any other HTTP error (5xx, network unreachable) is retried with exponential backoff up to a cap of `interval * 6`, after which the device returns to `DEVICE_IDLE` without surfacing an error.  [ADDED: explicit polling error-code table for `authorization_pending`, `slow_down`, `access_denied`, `expired_token`.]
+
+#### 14.3.5 Successful binding — what is stored where
+
+On HTTP 200 from `/oauth/token`, the server returns an `access_token` and a `refresh_token`. The device stores, in encrypted NVS under namespace `bind`:
+
+- `access_token` — opaque bearer.
+- `refresh_token` — used to obtain a new `access_token` before expiry.
+- `expires_at_unix` — UTC expiry of the current access_token.
+- `owner_user_id` — opaque server-issued user identifier (also used as the publish target for sketches).
+
+The **Ed25519 keypair** the device uses for signing uploads is *not* created or registered here. Key generation happens at first boot (see §14.4.1) and is *registered* with the server in the same online transaction that follows binding: the device issues `POST /v1/devices/{device_id}/public-key` with the base64 public key, and the server records it under the binding. If the public-key registration fails, the binding is rolled back to `DEVICE_IDLE`.
+
+### 14.4 Ed25519 signing — mandatory on every upload
+
+Every sketch upload **must** carry an Ed25519 signature over the canonical metadata JSON. Signatures are verified by the server before the sketch is accepted into the user's account, even in `draft` status. There is no unsigned-upload path. This is mandatory — it is not optional and not "soft".  [UPDATED: signing is mandatory on every upload; the public key is registered at the server during binding.]
+
+#### 14.4.1 Key generation and storage
+
+- On **first boot**, if no Ed25519 keypair is present in NVS, the device generates one inside the ESP32-S3 using `mbedtls`. The Ed25519 algorithm is fixed; we do not support RSA or ECDSA P-256 in v1.
+- The **private key** is stored in encrypted NVS under namespace `crypto`, key `ed25519_priv`. Encryption uses the ESP32-S3 flash encryption key (enabled in `sdkconfig.defaults`); if the board has been deployed with secure-boot v2 and flash encryption, the private key is also wrapped by the hardware key manager. An alternative acceptable in v1 is to **burn the private key into eFuse BLOCK_KEY** with `efuse_key_write` and disable software readback.  [UPDATED: Ed25519 private key is generated on first boot and stored in encrypted NVS (or eFuse).]
+- The **public key** is the Ed25519 verification key, base64-encoded (uncompressed, 32 raw bytes → 44-char standard base64 with `=` padding), and is registered with the server during the binding flow (§14.3.5).  [UPDATED: public key is registered with the backend during binding.]
+- The device never sends its private key to the server. It never displays the private key on the TFT. It never writes the private key to LittleFS or to UART logs.
+
+#### 14.4.2 Canonical JSON — the rules
+
+Because the firmware (C, on a microcontroller) and the server (whatever language runs the website) both compute the signature, they must agree **byte-for-byte** on the bytes being signed. The signed input is the canonical JSON serialization of the sketch metadata, with the following rules. Servers and firmware MUST pin to this exact list; deviations are bugs, not preferences.  [ADDED: canonical JSON rules so firmware and server sign and verify byte-for-byte.]
+
+1. **Encoding.** UTF-8, Unicode Normalization Form **NFC** (no smart quotes in any other form, no combining marks apart from their precomposed equivalents).
+2. **Object key ordering.** Keys are sorted **lexicographically** by their raw UTF-8 bytes. No reordering across renderers.
+3. **No insignificant whitespace.** No spaces, tabs, or newlines between tokens. The canonical encoding is one continuous string.
+4. **Numbers.** JSON numbers only. No comments. Integers without leading zeros; doubles in plain decimal, **no scientific notation**, **no trailing zeros** that change the value (`1.0` is not `1`; both are explicit). The values `NaN`, `Infinity`, and `-Infinity` are forbidden — represent them as the string `"NaN"` if a sketch needs to flag them.
+5. **Strings.** Minimal JSON escaping: the seven escapes `\`, `"`, control codes `\u0000…\u001F`, plus any Unicode codepoint that must be escaped for safety. Non-ASCII printable characters are passed through as UTF-8 bytes — **do not** `\u`-escape them.
+6. **Field set.** The metadata object carries exactly the fields listed in the canonical schema below. New fields require a schema version bump (§14.4.3).
+
+Canonical sketch-metadata schema (v1):
+
+```json
+{
+  "schema": 1,
+  "sketch_id": "a1b2",
+  "device_id": "<server-issued opaque>",
+  "captured_at_unix": 1739635200,
+  "slots": [{"id": 0, "name": "kick",  "samples": 88200, "rate": 44100},
+            {"id": 1, "name": "snare", "samples": 66150, "rate": 44100}],
+  "patterns": [{"index": 0, "steps": 16, "notes": "0100…"}],
+  "chain":     [{"pattern": 0, "repeats": 4}],
+  "title":      "Untitled Sketch",
+  "visibility": "private"
+}
+```
+
+`visibility` is one of `"private"` (the only value the device may write in v1; the server's web UI is the only thing that can flip it to `"public"` after publish). `schema = 1` lets us add fields later without breaking old signatures. The signed bytes are exactly the bytes of that JSON object — no prefix, no suffix, no trailing newline. The Ed25519 signature is computed over those bytes and transmitted as standard base64 (88 chars + `=` padding for the 64-byte raw signature).
+
+#### 14.4.3 Re-binding and key rotation
+
+A re-bind (after an unbind, §14.5) does **not** invalidate the existing keypair. The device retains the same `ed25519_priv`, and the server may keep the registered public key — sketches that were signed under it must still verify after a rebind. **Key rotation** is out of scope for v1: a key is only ever replaced by a factory reset (§3.13).
+
+### 14.5 Unbinding and revocation
+
+A binding can end in three ways. In every case the device's `access_token` becomes invalid, and the server-side history is preserved.  [ADDED: web-side unbind by the owning user, plus admin revoke for lost/stolen devices, plus sketch-history preservation with a fingerprint snapshot.]
+
+#### 14.5.1 Device-initiated unbind
+
+The user, on the device, picks **"Unbind this device"** from the TFT menu. The device POSTs to `DELETE /v1/devices/{device_id}/binding` with a valid access_token. On 2xx, the device clears `access_token`, `refresh_token`, `expires_at_unix`, and `owner_user_id` from encrypted NVS, and transitions to `DEVICE_IDLE`. The server keeps the device record, the public key, and the sketch history. The owner can rebind at any time.
+
+#### 14.5.2 Web-side unbind by the owning user
+
+The owning user signs into the website, opens the device list, and clicks **Unbind** on this device. The server invalidates the access_token on the spot. The next time the device attempts an upload or a refresh, it receives **HTTP 401 or 403**, and the firmware surfaces the message **"This device has been unbound from its account"** on the TFT and offers to *bind again*. The device does **not** silently retry. The device's local copy of `access_token` etc. is cleared on the 401/403 so the next boot starts at `DEVICE_IDLE`.
+
+#### 14.5.3 Admin revoke — lost or stolen devices
+
+If the owner reports a device lost or stolen (or the device is registered as stolen by another party), an admin issues `POST /v1/admin/devices/{device_id}/revoke`. The server records the revocation with the admin's user_id and a timestamp, marks the device record `state = revoked`, and **invalidates the access_token**. The device's public key is **not** deleted — it stays in the audit trail — but all sketch history is preserved with a final snapshot of the device fingerprint (§14.5.5). If the device later comes online, it sees the revocation on its first upload attempt and behaves as in §14.5.2.
+
+#### 14.5.4 Rebind after unbind / revoke
+
+Rebinding requires **either** the §14.5.1 (device-initiated), §14.5.2 (web-side) unbind **or** the §14.5.3 (admin revoke) to have completed first. The server refuses a new device-authorization request from a still-bound device. This enforces the §14.2 cardinality rule on a single device.
+
+#### 14.5.5 Sketch-history preservation with fingerprint snapshot
+
+On every unbind or revoke, the server takes a snapshot of:
+
+- `device_id`
+- `device_fingerprint` (the SHA-256 of the device's first-boot serial + hardware MAC + public-key fingerprint, computed deterministically — see §14.6)
+- `owner_user_id` at the moment of unbind / revoke
+- the timestamp
+- the reason (`user_unbind` / `admin_revoke` / `lost_stolen`)
+
+The snapshot is written to the server's `sketch_history.fingerprint_snapshot` column for every sketch the device ever uploaded. Sketches are **never** deleted by unbind or revoke. They remain visible to the owner (and to admins under §14.5.3) so that a stolen device cannot be used to silently remove evidence of what it had uploaded before the loss was noticed.
+
+### 14.6 Device fingerprint
+
+The fingerprint the server snapshots is computed deterministically at boot:
+
+```
+fingerprint = SHA-256(
+    serial                ||   // first-boot NVS "serial" key, 16 random bytes, base64
+    hardware_mac          ||   // ESP32-S3 eFuse MAC, 6 bytes, big-endian
+    pubkey_sha256         ||   // SHA-256 of the registered Ed25519 public key, raw bytes
+    firmware_git_sha              // 32-char hex, populated by the build system
+)
+```
+
+The fingerprint is not a secret, but it is what binds a sketch to "this exact unit, with this exact firmware build, with this exact key". If any of the four inputs changes (new serial, new key after factory reset, new firmware build), the fingerprint changes and the new fingerprint is recorded against all subsequent uploads.  [ADDED: device fingerprint definition supporting the §14.5.5 snapshot.]
+
+### 14.7 Sketch upload lifecycle — drafts are private by default
+
+Uploads from the device **do not** publish sketches. Every device upload lands as **`status = draft`, `visibility = private`** in the owner's account on the website. The user opens the website, reviews the draft, edits the title and slot names, drags it into a "space" (a folder / collection on the website), and only then clicks **Publish**. The TFT never has the power to publish — it can only initiate the upload that creates the draft.  [UPDATED: device uploads land as `status=draft, visibility=private`; publishing is a web-only action.]
+
+State transitions the server-side pipeline applies in order:
+
+1. `BOUND` device uploads signed payload → `RECEIVED`.
+2. Server verifies the Ed25519 signature against the registered public key → `SIGNED_OK` or `SIGNED_BAD` (reject, 4xx).
+3. Server deserializes the canonical JSON and runs invariants (slot count ≤ 16, sample rate in the supported set, etc.) → `VALIDATED_OK` or `VALIDATED_BAD` (reject, 4xx).
+4. Server writes the rows + payload to blob storage, status `draft`, visibility `private`, attaches the fingerprint snapshot from §14.5.5. → `DRAFT_VISIBLE`.
+5. The owner edits the draft via the website, then hits **Publish**. Status → `published`, visibility → `public` (if the user picked public), or stays `private` (if the user picked a "private collection"). → `PUBLISHED`.
+
+If step 4 fails (blob storage down, etc.), the server returns 5xx; the device surfaces **"Upload failed — try again later, the sketch is still saved on this device"** and leaves the draft on the device so it can retry without re-recording.
+
+### 14.8 Upload payload format and size limits
+
+A sketch upload is a **multipart/form-data** body with three required parts and one optional part, in this order:  [UPDATED: payload is a binary blob plus optional WAV sidecars; explicit size limits — `backup_file` ≤ 50 MB, each `sample_wav` ≤ 10 MB.]
+
+1. **`metadata`** (`application/json`) — the canonical-JSON object from §14.4.2, byte-for-byte. This is the bytes the Ed25519 signature covers.
+2. **`signature`** (`text/plain`) — the standard base64 Ed25519 signature (64 raw bytes → 88-char base64 with `=` padding) of `metadata`.
+3. **`backup_file`** (`application/octet-stream`) — the **binary sketch blob** containing samples, patterns, chains, and any other serialized state. The blob is a LittleFS tarball (or equivalent) of the sketch folder that §11.2 already defines for the on-flash sketch storage format.
+4. (Optional) **`sample_wav`** — one or more optional **`audio/wav`** sidecars, one per slot, attached so the website can play back samples in a browser without reimplementing the LittleFS sample decoder.
+
+Size limits (enforced by the server, with helpful 413 errors; the firmware pre-checks to avoid wasting bandwidth):
+
+| Part | Limit |
+|---|---|
+| `backup_file` (the whole blob) | **≤ 50 MB** |
+| Each `sample_wav` sidecar | **≤ 10 MB** |
+| Total request body | **≤ 64 MB** (sum of all parts + multipart overhead) |
+| `metadata` JSON | **≤ 16 KB** (this is a metadata object, not the sketch) |
+
+The bytes the firmware signs are *only* the `metadata` part. The server verifies the signature first, then independently checks the size limits, then unpacks the `backup_file` and the optional `sample_wav`s. There is no signature over the binary blob in v1; the binary blob is protected indirectly because the metadata references the `sketch_id` and a content hash of the blob is included in a future schema version (out of scope here).
+
+### 14.9 Security notes specific to this section
+
+- **All** network calls in this section use TLS 1.2 or later. The firmware pins the server's leaf certificate by SHA-256 at provisioning time; pins are stored in encrypted NVS. A compromised CA does not let an attacker impersonate the server.
+- The TFT only displays the `verification_uri` and `user_code` during `SHOW_QRCODE`. It never displays the `access_token`, `refresh_token`, or `device_code` (they would be useless on the screen anyway, but the rule is stated for the record).
+- The `device_code` is single-use and expires server-side after `expires_in` (default 600 s in v1). The firmware starts a watchdog timer when entering `POLLING` and discards the codes at expiry (§14.3.4).
+- The Ed25519 private key is **never** copied out of the device, **never** logged, and **never** rendered on the TFT.
+- A factory reset wipes both the `crypto` namespace and the `bind` namespace, forcing key regeneration and a fresh binding on next boot.
+
+### 14.10 Open questions deferred to a future revision
+
+- Token refresh on long-lived devices. The v1 path is "rebind if the access_token's expiry approaches and refresh fails"; v2 will add `refresh_token` rotation and reuse-detection.
+- Per-sketch signing keys, vs. one device-wide key. v1 is device-wide.
+- A web-side flow that lets a user *replace* a draft with a new upload from the same device. The semantics (keep history vs. replace) are not decided yet.
+
+---
+
+## 15. Glossary
 
 - **AMY** — A free open-source fixed-point music synthesizer library. Used for all sound generation in this project. ([github.com/shorepine/amy](https://github.com/shorepine/amy))
 - **BPM** — Beats per minute. How fast the music goes.
@@ -2015,9 +2297,55 @@ If you read the book and feel the urge to make your own instrument instead of (o
 - **Tweak** — A small adjustment you can make to a sound (pitch, filter, or trim).
 - **UART** — Universal Asynchronous Receiver/Transmitter. The protocol used for the USB-serial port that talks to your computer.
 - **Voice** — One independent instance of a playing sound. With 4-voice polyphony, you can hear 4 sounds at once.
-- **WAV** — A common audio file format. Not directly used in this firmware.
-- **WiFi** — Wireless networking. Not used in this firmware (would need a WiFi-enabled ESP32 variant; the WROOM-1-N16R8 has it disabled by default).
+- **WAV** — A common audio file format. Not directly used as the sketch-blob format on the device, but used as an optional sidecar in uploads (see §14.8).  [UPDATED: WAV noted as an upload sidecar, no longer "Not directly used in this firmware".]
+- **WiFi** — Wireless networking. Optional in this firmware. The ESP32-S3-WROOM-1-N16R8 module has the radio physically present; the firmware enables it only when a user opts into Wi-Fi–backed features (see §14). When not opted-in, the radio stays disabled and no Wi-Fi subsystem is initialized.  [UPDATED: previously stated "Not used in this firmware (would need a WiFi-enabled ESP32 variant; the WROOM-1-N16R8 has it disabled by default)" — that statement is no longer accurate once §14 is adopted. The radio is on the chip; whether the firmware drives it is what matters.]
 
 ---
 
-*End of document. ~18 000+ words. Source of truth for the PO-33 manual section numbers is [teenage.engineering/guides/po-33/en](https://teenage.engineering/guides/po-33/en); for our firmware, see the file paths and function names cited in §3. How we can break the PO-33's limits is in §10; the v2 multi-project storage proposal is in §11; cliff's notes on the companion book are in §12.*
+*End of document. ~18 000+ words. Source of truth for the original PO-33 manual section numbers is [teenage.engineering/guides/po-33/en](https://teenage.engineering/guides/po-33/en); for our firmware, see the file paths and function names cited in §3. How we can break the PO-33's limits is in §10; the multi-project storage proposal is in §11; cliff's notes on the companion book are in §12; the optional Wi-Fi / web-binding / sketch-upload design (ESP32-S3 PO-33 remake) is in §14; the glossary moved to §15.*  [UPDATED: footer now references §14 (new) and renumbers the glossary pointer to §15.]
+
+---
+
+## Change Log
+
+All revisions to this document are recorded here. Each entry corresponds to a set of inline `[ADDED]` / `[UPDATED]` / `[REMOVED]` markers placed at the spot of the change, so the body of the document and this log are kept in lock-step.
+
+### 1.0 — 2026-10-17 — Initial Version / scaffolding + new §14 (Wi-Fi, web binding, sketch upload)
+
+**Scope note (important).** The original prompt for this revision described the document as already containing a Wi-Fi provisioning section, a device identity section, a binding flow section, a sketch upload section, and security / error-handling sections, then asked for *surgical* updates. The actual `docs/DESIGN.md` had no such content — it was a pure device-internal design document (sections 0–13, glossary). Rather than refuse the work or invent a new file, this revision treats the result as a **Version 1.0 first pass**: a brand-new §14 is added from scratch, plus a small terminological disambiguation on the one FAQ entry that genuinely calls the disambiguation out, plus honest corrections to two glossary entries that would otherwise have been left saying the opposite of what is now true. Everything else (sections 0–12) is untouched, per the surgical-edit mandate.
+
+Changes in this revision, in source order (full enumeration follows in the entries below):
+
+- Header scaffold (`Version`, `Date`, terminology block).
+- One FAQ entry in §9.
+- New §14 (10 subsections) inserted between §12 and the (now §15) glossary.
+- Two glossary entries corrected.
+- Trailing footer paragraph references updated.
+- Glossary renumbered §13 → §15.
+- This Change Log section appended.
+
+Detailed enumeration (per marker site):
+
+1. **[ADDED]** Header scaffold: `Version: 1.0` and `Date: 2026-10-17` lines, plus a terminology block defining **"ESP32-S3 PO-33 remake"** vs. **"original PO-33"** / **"Teenage Engineering PO-33"** / **"real PO-33"**. *(Clarification #3 groundwork.)*
+2. **[UPDATED]** FAQ entry "Q: Does it work with a real PO-33?" — the only existing-text spot whose terminology was genuinely ambiguous in the way Clarification #3 cares about. Rephrased to "ESP32-S3 PO-33 remake boards" and "original Teenage Engineering PO-33". *(Clarification #3.)*
+3. **[ADDED]** New **§14. Wi-Fi, web binding, and sketch upload (community integration)** inserted between §12 and the (renumbered) glossary.
+    - §14.0 Scope and non-goals.
+    - §14.1 *Who needs to bind a device — and who does not*: binding is **optional**; original-PO-33 owners and device-less users are full citizens. *(Clarification #1.)*
+    - §14.2 *Cardinality*: **1 user → N devices**, **1 device → 1 user**; rebind requires explicit unbind / admin revoke. *(Clarification #2.)*
+    - §14.3 *Binding protocol — RFC 8628 Device Authorization Grant*. Includes the state diagram `DEVICE_IDLE → AUTHORIZE_REQUEST → SHOW_QRCODE → POLLING → BOUND / IDLE`, the QR-code primary path (§14.3.2), the manual `user_code` fallback (§14.3.3), the polling-error table for `authorization_pending` / `slow_down` / `access_denied` / `expired_token` (§14.3.4), and what the device stores on success (§14.3.5). *(Clarifications #5 and #6.)*
+    - §14.4 *Ed25519 signing — mandatory on every upload*. First-boot key generation; private key in encrypted NVS namespace `crypto` (or eFuse `BLOCK_KEY`); public key registered with server during binding (§14.4.1). Canonical-JSON rules (UTF-8 NFC, lex-sorted keys, no insignificant whitespace, plain-decimal numbers, minimal string escaping, fixed schema with `schema=1`) and the canonical sketch-metadata JSON example (§14.4.2). Rebind does **not** rotate keys (§14.4.3). *(Clarification #4.)*
+    - §14.5 *Unbinding and revocation*: device-initiated unbind (§14.5.1), web-side unbind by owner detected via HTTP 401/403 (§14.5.2), admin revoke for lost / stolen devices (§14.5.3), rebind prerequisite (§14.5.4), and the sketch-history-preservation fingerprint snapshot (§14.5.5). *(Clarification #7.)*
+    - §14.6 *Device fingerprint*: SHA-256 over `serial || hardware_mac || pubkey_sha256 || firmware_git_sha`. Backstop for the §14.5.5 snapshot.
+    - §14.7 *Sketch upload lifecycle — drafts are private by default*. Device uploads land as `status = draft`, `visibility = private`; publish is web-only. Server pipeline: `RECEIVED → SIGNED_OK → VALIDATED_OK → DRAFT_VISIBLE → PUBLISHED`. *(Clarification #8.)*
+    - §14.8 *Upload payload format and size limits*. Multipart body: `metadata` + `signature` + `backup_file` (binary LittleFS tarball) + optional per-slot `sample_wav` sidecars. Size limits: `backup_file` ≤ **50 MB**, each `sample_wav` ≤ **10 MB**, total request ≤ 64 MB, `metadata` JSON ≤ 16 KB. Bytes signed are only the metadata part. *(Clarification #9.)*
+    - §14.9 *Security notes specific to this section* (TLS 1.2+ with SHA-256 leaf pinning, no secrets on the TFT, `device_code` expiry watchdog, Ed25519 private-key hygiene, factory-reset wipe of both `crypto` and `bind` NVS namespaces).
+    - §14.10 *Open questions deferred*: refresh-token rotation, per-sketch keys, draft-replace UX.
+4. **[UPDATED]** Glossary entries:
+    - **WAV**: extended to note its role as an optional upload sidecar (§14.8); original "Not directly used in this firmware" wording removed.
+    - **WiFi**: the original "Not used in this firmware (would need a WiFi-enabled ESP32 variant; the WROOM-1-N16R8 has it disabled by default)" is replaced with the correct statement that the radio is on the chip and the firmware enables it only when the user opts into the §14 features.
+5. **[UPDATED]** Trailing "*End of document*" footer paragraph now references §10 / §11 / §12 / §14 / §15 with correct section numbers.
+6. **Renumbered** Original §13 ("Glossary") is now §15. Internal glossary entries unchanged except for the two above.
+
+**What this revision does NOT change.** Sections 0–12 are untouched aside from the one FAQ entry listed above. Pinout, hardware overview, scorecard, sketch-storage model (§11), UI-screen descriptions (§6), and the music-theory companion (§12) are unchanged. No code paths, file paths, or function names were added or modified outside the new §14.
+
+**Marker convention.** Every modified or inserted paragraph carries an inline marker of the form `[ADDED: …]`, `[UPDATED: …]`, or `[REMOVED: …]`. These markers can be stripped in a future revision once the prose is stable; until then they are the audit trail that pairs the body of the document to the entries in this Change Log.
