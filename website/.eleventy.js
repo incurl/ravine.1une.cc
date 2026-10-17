@@ -100,13 +100,20 @@ module.exports = function (eleventyConfig) {
   eleventyConfig.addPassthroughCopy({ "src/assets/js": "assets/js" });
   eleventyConfig.addPassthroughCopy({ "src/assets/css": "assets/css" });
 
-  /* Watch CSS/JS in dev */
+  /* Pass through static images (the ember hero, etc.) so templates
+   * can reference /assets/img/<file> and have the file actually exist
+   * in _site/assets/img/. */
+  eleventyConfig.addPassthroughCopy({ "src/assets/img": "assets/img" });
+
+  /* Watch CSS/JS/images in dev */
   eleventyConfig.addWatchTarget("src/assets/css/");
   eleventyConfig.addWatchTarget("src/assets/js/");
+  eleventyConfig.addWatchTarget("src/assets/img/");
 
   /* Re-watch book source files so the reader rebuilds when content changes. */
   eleventyConfig.addWatchTarget("../docs/MAKERS_COMPANION.md");
   eleventyConfig.addWatchTarget("../docs/Ravine_Phoenix_Music_Course.md");
+  eleventyConfig.addWatchTarget("../docs/DESIGN.md");
 
   /* Expose each book's chapters as a collection that paginated pages
    * can iterate over. We need both per-book collections (for the
@@ -224,6 +231,68 @@ module.exports = function (eleventyConfig) {
   const MarkdownIt = require("markdown-it");
   const md = new MarkdownIt({ html: true, linkify: true, typographer: true });
   eleventyConfig.addFilter("markdown", (str) => md.render(str || ""));
+
+  /* Inject id="..." anchors onto every h1–h4 in a rendered markdown
+   * string. Used for in-page links like /design/#change-log. We
+   * duplicate the slugify rules from the chapter splitter above so
+   * heading IDs are predictable across the site. The id is computed
+   * from the *inner text* of the heading — we strip the trailing
+   * `¶` paragraph-sign markdown-it-anchor would normally inject, and
+   * we don't try to disambiguate duplicates (the design doc has no
+   * duplicate h2 texts, so collisions don't matter here; if a future
+   * doc grows duplicates we can append `-2`, `-3`, etc.). */
+  const slugCache = new Map();
+  function slugify(text) {
+    if (slugCache.has(text)) return slugCache.get(text);
+    const s = String(text)
+      .toLowerCase()
+      .replace(/¶/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+    slugCache.set(text, s);
+    return s;
+  }
+  function addHeadingAnchors(html) {
+    return String(html).replace(
+      /<(h[1-4])>([\s\S]*?)<\/\1>/g,
+      (m, tag, inner) => {
+        /* inner may contain nested HTML (e.g. <code>foo</code>).
+         * Build a plain-text version for the slug. */
+        const text = String(inner).replace(/<[^>]+>/g, "");
+        const id = slugify(text);
+        if (!id) return m;
+        return `<${tag} id="${id}">${inner}</${tag}>`;
+      }
+    );
+  }
+  eleventyConfig.addFilter("anchorHeadings", (html) =>
+    addHeadingAnchors(html)
+  );
+
+  /* Read a file from disk and return its contents as a string.
+   * Used by src/design.njk to pull in docs/DESIGN.md at build time
+   * (so we don't have to duplicate the document into a .md template
+   * and lose the single-source-of-truth). Path is resolved relative
+   * to the project root (one level above website/). */
+  const REPO_ROOT = path.join(__dirname, "..");
+  eleventyConfig.addFilter("read", (relPath) => {
+    const abs = path.isAbsolute(relPath)
+      ? relPath
+      : path.join(REPO_ROOT, relPath);
+    return fs.readFileSync(abs, "utf8");
+  });
+
+  /* Same as `read`, but the result is run through the markdown filter
+   * and the heading-anchor post-processor. Lets a template do
+   * `{{ "docs/DESIGN.md" | readMarkdown | safe }}` in one expression. */
+  eleventyConfig.addFilter("readMarkdown", (relPath) => {
+    const abs = path.isAbsolute(relPath)
+      ? relPath
+      : path.join(REPO_ROOT, relPath);
+    return addHeadingAnchors(
+      md.render(fs.readFileSync(abs, "utf8"))
+    );
+  });
 
   return {
     dir: {

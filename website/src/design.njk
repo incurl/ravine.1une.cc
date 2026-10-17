@@ -1,0 +1,47 @@
+---
+layout: base.njk
+title: Design Document
+description: The full PO-33 K.O! ESP32-S3 firmware design document — feature map, workflows, scorecard, and the peer-to-peer ESP-NOW sketch-exchange design.
+permalink: /design/
+---
+
+<section class="pt-12 pb-6">
+  <div class="flex flex-wrap items-center gap-2 mb-4">
+    <span class="badge">Design doc</span>
+    <span class="badge">Markdown</span>
+    <span class="badge">v1.1</span>
+  </div>
+  <h1 class="section-title">📐 Design Document</h1>
+  <p class="section-lede">
+    The full feature-design document for the PO-33 K.O! ESP32-S3 firmware:
+    every PO-33 feature mapped to a file, every workflow walked through,
+    the honest scorecard, the cheat sheet, the FAQ, and the design for
+    the optional Wi-Fi / web-binding / sketch-upload (§14) and the
+    face-to-face peer-to-peer ESP-NOW sketch-exchange (§15) features.
+    The <a href="#change-log" class="text-po33-600 hover:underline">Change&nbsp;Log</a>
+    at the bottom records every revision.
+  </p>
+  <div class="card flex flex-wrap items-center gap-3 text-sm">
+    <span class="text-slate-600 dark:text-slate-400">
+      Prefer raw markdown?
+    </span>
+    <a class="btn-secondary text-sm"
+       href="{{ site.repo_url }}/blob/main/docs/DESIGN.md"
+       target="_blank" rel="noopener">View on GitHub ↗</a>
+    <span class="text-slate-500 dark:text-slate-500 hidden sm:inline">·</span>
+    <a class="btn-secondary text-sm"
+       href="{{ site.repo_url }}/commits/main/docs/DESIGN.md"
+       target="_blank" rel="noopener">Commit history ↗</a>
+  </div>
+</section>
+
+<!-- The body. We pull docs/DESIGN.md at build time via the
+     `readMarkdown` filter (see website/.eleventy.js) and run it through
+     the same markdown-it pipeline the reader uses. The result is
+     wrapped in `.prose-reader` so the long-form typography already
+     defined in main.css (h1/h2/h3 spacing, blockquote style, table
+     rules, kbd badges, etc.) takes over — no extra CSS needed.
+     Path is relative to the repo root (one level above website/). -->
+<article class="prose-reader pt-4 border-t border-slate-200 dark:border-slate-800">
+  {{ "docs/DESIGN.md" | readMarkdown | safe }}
+</article>
