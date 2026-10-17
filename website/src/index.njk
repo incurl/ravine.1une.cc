@@ -5,29 +5,44 @@ description: A pocket-sized PO-33 K.O! emulator on ESP32-S3. Browser-flashable f
 ---
 
 <section class="pt-12 md:pt-20 pb-12">
-  <div class="max-w-3xl">
-    <div class="flex items-center gap-2 mb-4">
-      <span class="badge">ESP-IDF v6.0</span>
-      <span class="badge">AMY synth</span>
-      <span class="badge">ESP32-S3</span>
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-10 md:gap-12 items-center">
+    <div class="max-w-xl">
+      <div class="flex items-center gap-2 mb-4 flex-wrap">
+        <span class="badge">ESP-IDF v6.0</span>
+        <span class="badge">AMY synth</span>
+        <span class="badge">ESP32-S3</span>
+      </div>
+      <h1 class="text-4xl md:text-6xl font-extrabold tracking-tight">
+        <span class="text-po33-600">PO-33</span> K.O!
+        <span class="block text-2xl md:text-3xl font-semibold text-slate-600 dark:text-slate-400 mt-2">
+          for ESP32-S3
+        </span>
+      </h1>
+      <p class="mt-6 text-xl text-slate-600 dark:text-slate-400 max-w-2xl">
+        A pocket-sized sampler on a $5 dev board. AMY-powered, 16-step,
+        16 punch-in effects, 40&nbsp;s of sampling. Flash from your browser
+        — no toolchain required.
+      </p>
+      <div class="mt-8 flex flex-wrap gap-3">
+        <a href="#flash" class="btn-primary">⚡ Flash Firmware</a>
+        <a href="{{ site.repo_url }}"
+           target="_blank" rel="noopener"
+           class="btn-secondary">View Source ↗</a>
+        <a href="/hardware/" class="btn-secondary">Hardware Guide →</a>
+      </div>
     </div>
-    <h1 class="text-4xl md:text-6xl font-extrabold tracking-tight">
-      <span class="text-po33-600">PO-33</span> K.O!
-      <span class="block text-2xl md:text-3xl font-semibold text-slate-600 dark:text-slate-400 mt-2">
-        for ESP32-S3
-      </span>
-    </h1>
-    <p class="mt-6 text-xl text-slate-600 dark:text-slate-400 max-w-2xl">
-      A pocket-sized sampler on a $5 dev board. AMY-powered, 16-step,
-      16 punch-in effects, 40&nbsp;s of sampling. Flash from your browser
-      — no toolchain required.
-    </p>
-    <div class="mt-8 flex flex-wrap gap-3">
-      <a href="#flash" class="btn-primary">⚡ Flash Firmware</a>
-      <a href="{{ site.repo_url }}"
-         target="_blank" rel="noopener"
-         class="btn-secondary">View Source ↗</a>
-      <a href="/hardware/" class="btn-secondary">Hardware Guide →</a>
+
+    <!-- Ember hero image. 1280x720 JPEG, 16:9, copied to /assets/img/
+         by the eleventy passthrough config. Wrapped in .ember-glow
+         (a soft orange radial halo that matches the po33 palette) so
+         the image reads as part of the design rather than a stock
+         drop-in. Lazy-loaded since it's a large image below the fold
+         on mobile and the LCP is the headline text on the left. -->
+    <div class="ember-glow">
+      <img src="/assets/img/ember_hero.jpeg"
+           alt="The 'Ember' PO-33 K.O! remake — a slim matte-black aluminum body with a 4×4 matrix of sixteen amber-backlit step buttons, two knobs, and a 1.8-inch color TFT."
+           width="1280" height="720"
+           loading="lazy" decoding="async">
     </div>
   </div>
 </section>

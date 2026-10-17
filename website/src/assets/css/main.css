@@ -44,6 +44,57 @@
            rounded-full bg-po33-100 dark:bg-po33-900/40
            text-po33-700 dark:text-po33-300;
   }
+
+  /* Home-page hero: a soft orange "ember" radial glow behind the
+   * product image. The gradient is the existing po33 palette (the
+   * same orange that powers the buttons and links), so the image
+   * reads as part of the design language rather than a stock photo
+   * dropped in. The 600→300 → transparent falloff is calibrated so
+   * the glow is strongest behind the device, fading to nothing at
+   * the corners — the image floats on a warm halo. */
+  .ember-glow {
+    position: relative;
+    border-radius: 1rem;
+    background:
+      radial-gradient(ellipse at 50% 45%,
+        rgba(234, 88, 12, 0.35) 0%,
+        rgba(234, 88, 12, 0.18) 35%,
+        rgba(234, 88, 12, 0.00) 70%),
+      linear-gradient(180deg,
+        rgba(15, 23, 42, 0.00) 0%,
+        rgba(15, 23, 42, 0.25) 100%);
+    padding: 1.25rem;
+  }
+  .ember-glow::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    border: 1px solid rgba(234, 88, 12, 0.25);
+    pointer-events: none;
+  }
+  /* In dark mode the glow stays warm; we just raise the alpha a touch
+   * and switch the border to a slightly warmer hue. */
+  .dark .ember-glow {
+    background:
+      radial-gradient(ellipse at 50% 45%,
+        rgba(251, 146, 60, 0.30) 0%,
+        rgba(234, 88, 12, 0.18) 40%,
+        rgba(15, 23, 42, 0.00) 75%);
+  }
+  .dark .ember-glow::before {
+    border-color: rgba(251, 146, 60, 0.30);
+  }
+  .ember-glow img {
+    @apply rounded-lg w-full h-auto;
+    display: block;
+    box-shadow: 0 20px 50px -20px rgba(0, 0, 0, 0.5),
+                0 8px 20px -8px rgba(234, 88, 12, 0.4);
+    transition: transform 350ms ease;
+  }
+  .ember-glow:hover img {
+    transform: scale(1.015);
+  }
 }
 
 /* ─── esp-web-tools button styling ──────────────────────────── */
