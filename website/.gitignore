@@ -6,3 +6,12 @@ package-lock.json
 
 # Real firmware binaries (placeholders are committed; real ones are large)
 public/firmware/*.bin
+
+# Offline content-generation tools (website/tools/) — see tools/README.md.
+# Scripts in tools/ are versioned; their outputs and local config are not.
+tools/.env
+tools/.env.*
+tools/renders/
+tools/*.png
+tools/*.jpeg
+!tools/README.md
