@@ -146,7 +146,7 @@ There are **2 analog knobs**, also called "Knob A" and "Knob B" (just like the P
 Once you have read §1, you have a mental model of the device. There are three things you might want to do next, and the rest of this document supports all three:
 
 - **Build the device.** Go to the [project website](https://ravine.1une.cc), where you can flash our firmware onto your board with one click in Chrome / Edge / Firefox over USB. The *Hardware* page there gives a full bill of materials and pin map.
-- **Read the rest of this document.** §2 covers every term used in the project. §3 maps every PO-33 feature to a piece of code with an honest done / partial / missing status. §10 explains how our hardware can break the PO-33's limits. §11 is the v2 proposal for multi-**sketch** storage & restore (we call the unit a "sketch" rather than "song"). §12 is a cliff's-notes reading guide for the *Make: Electronic Music from Scratch* book. §14 is the optional Wi-Fi, web-binding, and sketch-upload design (ESP32-S3 PO-33 remake). §15 is a glossary.  [UPDATED: §13 → §15 renumbering propagated from the §14 insertion; §14 added to the list of forward-reading pointers.]
+- **Read the rest of this document.** §2 covers every term used in the project. §3 maps every PO-33 feature to a piece of code with an honest done / partial / missing status. §10 explains how our hardware can break the PO-33's limits. §11 is the v2 proposal for multi-**sketch** storage & restore (we call the unit a "sketch" rather than "song"). §12 is a cliff's-notes reading guide for the *Make: Electronic Music from Scratch* book. §14 is the optional Wi-Fi, web-binding, and sketch-upload design (ESP32-S3 PO-33 remake). §15 is the peer-to-peer, no-internet sketch-exchange design (ESP-NOW, two devices, face-to-face). §16 is a glossary.  [UPDATED: §13 → §15 → §16 renumbering propagated from the §14 insertion (in rev 1.0) and from the §15/§16 swap (in rev 1.1, so the Glossary is the last section of the document, per the standing rule); §14 and §15 added to the list of forward-reading pointers.]
 - **Read the source.** The repo at the [project URL](https://ravine.1une.cc) (or wherever you got this document) is roughly 3,500 lines of C across `main/audio`, `main/sequencer`, `main/ui`, `main/storage`, `main/system`, and `main/tests`. The audio engine is entirely in the vendored AMY library.
 
 If you are a complete novice, the recommended order is: §2 (concepts) → §3.1 (recording) → §5 (workflows) → build it → §10 (breaking limits) → §11 (multi-sketch) → §12 (the book).
@@ -570,6 +570,15 @@ See §4 below for the per-effect deep dive.
 - **Our hardware combo:** Same.
 - **Status:** ❌ missing.
 
+#### F-039 — Peer-to-peer sketch exchange over ESP-NOW (face-to-face, no internet)
+
+- **Manual ref:** None — this is a new capability, not in the original PO-33. The original device's §9 transfer requires a 3.5 mm audio cable and a handshake that erases the receiving unit (see F-028). ESP-NOW exchange is a wireless, *additive* transfer path that does not erase, does not need a router, and does not need a server.
+- **Layman:** Two PO-33 K.O! devices, side by side, can copy a sketch from one to the other with no internet, no router, no phone, no audio cable. You pick "Send sketch" on one, pick "Receive sketch" on the other, type a 6-digit code on the receiver to confirm the sender, and the sketch arrives as a new sketch in the receiver's picker (the receiver's existing sketches are untouched). Distance: up to ~30 m line-of-sight, ~10 m indoors. The transfer is encrypted with a key derived from the 6-digit code.
+- **PO-33 button combo:** N/A (no analog on the original).
+- **Our hardware combo:** **Hold WRITE + SOUND for 2 s** opens the **Transfer** menu on the TFT. Knob A scrolls **Send sketch** / **Receive sketch** / **Cancel**; click the encoder to pick. On the receiver, the 6-digit code is entered via the **step buttons**: columns map to 4-3-2-1 (left-to-right), rows to A-B-C-D (top-to-bottom); the final 6th digit is shown as a static value, and the encoder click submits. (The 4×4 matrix gives a 16-key keypad, which is more than enough for 0–9 + submit/backspace; the 6-digit code is short enough that the keypad is comfortable.) Both devices show a progress bar (0–100 %) and the post-transfer summary (sketch ID, name, byte count, sketches.bin SHA-256, elapsed time).
+- **Code location:** New `main/p2p/espnow_p2p.{c,h}` module (ESP-NOW init, peer table, send/recv, retry, fragmentation), `main/p2p/transfer_protocol.{c,h}` (the sketch-blob chunk / ack / NACK state machine), and `main/p2p/pairing.{c,h}` (the 6-digit code → AES-128 key derivation). Sender reads the active sketch from §11.2's `samples.bin` + `patterns.bin` + `chain.bin` + `meta.bin` and packages it as a single binary blob of ≤ 50 MB; receiver unpacks it into a new sketch folder under `/sketches/` and updates `sketches.lst`.
+- **Status:** ⚠️ **partial.** The protocol (chunk size, retry policy, pairing key derivation, packet format) and the §11 blob reuse are designed in §15. The `sdkconfig` already enables the WiFi + ESP-NOW subsystems (`CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM=7`, `CONFIG_ESP_WIFI_SOFTAP_SUPPORT=y`). The UI screen, the send/recv state machine, and the chunked-transfer task are not yet committed. No code in §15 is in the tree; this is a v2 design.
+
 ### 3.10 Section 10 — Sync
 
 #### F-030 — Jam-sync out (pulse on each 16th note)
@@ -895,6 +904,22 @@ explicit saves (see §11.2 and ADR-0004).
 
 **On our firmware:** The clock works (F-033). Setting an alarm via shell: `clock_set_alarm 7 30 3` (play slot 3 at 07:30). The alarm-firing timer is not yet implemented (F-034).
 
+### 5.11 How do I send a sketch to another device face-to-face?
+
+**On a real PO-33:** Not possible. The original §9 transfer requires a 3.5 mm audio cable and erases the receiving unit (see F-028).
+
+**On our firmware:** Two devices, side by side, both running v2 firmware with the §15 ESP-NOW feature, no internet, no router, no phone, no audio cable. The flow is:
+
+1. **On the sender:** Hold **WRITE + SOUND** for 2 seconds. The TFT opens the **Transfer** menu. Turn Knob A to **Send sketch**; click the encoder. The sender shows **"Waiting for receiver — code 482 913"** (a 6-digit code, 30-second timeout, regenerates every 30 s if no peer appears).
+2. **On the receiver:** Hold **WRITE + SOUND** for 2 seconds. The TFT opens the **Transfer** menu. Turn Knob A to **Receive sketch**; click the encoder. The receiver shows a code-entry screen; type the 6-digit code from the sender's screen using the step buttons as a 0–9 keypad. (The 4×4 matrix gives 16 keys; the layout maps columns to 4-3-2-1 left-to-right and rows to A-B-C-D top-to-bottom, with the bottom row doubling as 0 / backspace / submit.) Click the encoder to confirm.
+3. **Both devices** show a progress bar (0–100 %) and the elapsed time. Typical sketches (16 patterns, ~5 s of samples, 1 chain) transfer in well under 5 seconds at the default 1 Mbit PHY; the slowest case is a sketch with a full ~40 s sample pool, which can take 30–60 s.
+4. **On success:** the receiver shows **"Received sketch <id> '<name>' — 1.2 MB in 4.3 s"** and prompts **Load now / Save & exit**. The new sketch appears in the receiver's sketch picker as a new folder under `/sketches/<id>/`; `sketches.lst` is updated atomically.
+5. **On failure:** the receiver shows a one-line reason (**"Peer timed out"**, **"Wrong code"**, **"Sketch too large"**, **"Flash full"**, **"Cancelled by sender"**) and the partial transfer is rolled back (no half-written sketch folder; the active sketch is unchanged).
+
+The transfer is **encrypted** (AES-128 with a key derived from the 6-digit code via PBKDF2-HMAC-SHA256, 4096 iterations, salt = both devices' MAC addresses concatenated), and **non-destructive** (the receiver's existing sketches are never touched; the sender's active sketch is never touched). The original sketch on the sender can be re-sent to as many receivers as you like.
+
+See §15 for the full design (packet format, state machine, retry policy, threat model, deferred items). [ADDED: §5.11 documents the user-facing flow for §15's ESP-NOW sketch exchange.]
+
 ---
 
 ## 6. Better UI: a richer TFT
@@ -1085,12 +1110,12 @@ The payoff: a user looking at the device can tell at a glance which sound is loa
 | 6. BPM / tempo | 2 | 1 | 0 | 1 |
 | 7. Volume | 1 | 1 | 0 | 0 |
 | 8. Copy + delete | 5 | 4 | 1 | 0 |
-| 9. Data transfer | 2 | 0 | 0 | 2 |
+| 9. Data transfer | 3 | 0 | 1 | 2 |
 | 10. Sync | 3 | 2 | 0 | 1 |
 | 11. Clock + alarm | 2 | 2 | 0 | 0 |
 | 12. Battery | 2 | 2 | 0 | 0 |
 | 13. Factory reset + UI | 2 | 2 | 0 | 0 |
-| **Total** | **~50** | **30 (60%)** | **13 (26%)** | **7 (14%)** |
+| **Total** | **~51** | **30 (59%)** | **14 (27%)** | **7 (14%)** |
 
 ### 7.2 The effect-list mismatch (v2 plan)
 
@@ -2258,9 +2283,285 @@ The bytes the firmware signs are *only* the `metadata` part. The server verifies
 - Per-sketch signing keys, vs. one device-wide key. v1 is device-wide.
 - A web-side flow that lets a user *replace* a draft with a new upload from the same device. The semantics (keep history vs. replace) are not decided yet.
 
+## 15. Peer-to-peer sketch exchange over ESP-NOW
+
+[ADDED: §15 is a new top-level section that designs the face-to-face, no-internet sketch-exchange feature for two PO-33 K.O! devices. It complements §14 (which covers the Wi-Fi–backed, server-mediated upload path) and does not replace §9's planned audio-cable transfer (F-028).]
+
+### 15.0 Why this section exists
+
+The PO-33's §9 transfer is a 3.5 mm audio cable plus a handshake that **erases the receiving unit** (see F-028). That is fine for a one-time back-up, but it is the wrong tool for the most common sketch-sharing case: two friends, side by side, who have just made beats they want to swap. The cable is fiddly, the erase is scary, and there is no preview of what is about to be overwritten.
+
+The ESP32-S3's 2.4 GHz radio is already on the chip (see the §16 *WiFi* glossary entry and §14's opt-in model). ESP-NOW is a connectionless, peer-to-peer protocol that Espressif ships in the ESP-IDF WiFi stack: no router, no access point, no internet, no handshake to a server, no IP layer, latency measured in single-digit milliseconds, range of ~30 m line-of-sight / ~10 m indoors. It is the right primitive for "device A pushes a sketch to device B that is in the same room." This section designs that feature.
+
+> **Out of scope (v1 of this section).** Server-mediated upload is in §14. The audio-cable transfer (F-028) and the tape-recorder backup (F-029) are still in §3.9 and are not replaced by this section. Streaming a *live* performance over ESP-NOW (jam-session mode) is a future-revision feature; §15 only ships the sketch-blob transfer.
+
+### 15.1 Goals and non-goals
+
+**Goals**
+
+1. **Push a sketch from one device to another, no infrastructure.** No Wi-Fi network, no internet, no phone, no USB cable, no audio cable, no server account.
+2. **Non-destructive on the receiver.** The receiver's existing sketches are untouched. The new sketch arrives as a new folder under `/sketches/<id>/`, with `sketches.lst` updated atomically (same atomic-rename discipline as §11).
+3. **Non-destructive on the sender.** The sender's active sketch is read but not modified. The same sketch can be re-sent to as many receivers as the user wants.
+4. **Confidential on the air.** A 6-digit pairing code entered on the receiver derives an AES-128 session key. The radio payload is encrypted; an eavesdropper who captures the packets cannot decrypt them.
+5. **Resumable in the face of ordinary RF loss.** A missed packet is retransmitted; a 5-second lull does not abort the transfer; a receiver that briefly walks out of range and back in does not lose its place.
+6. **Happens in seconds, not minutes.** A typical sketch (16 patterns, ~5 s of samples, 1 short chain, a few KB) fits in one 250-packet burst and completes in well under 5 seconds at the default 1 Mbit PHY. A "maxed out" sketch (16 patterns, a ~40 s sample pool, a 128-entry chain) takes 30–60 seconds.
+
+**Non-goals (v1)**
+
+- **Group transfer** (1 sender → N receivers simultaneously). v1 is strictly 1:1. Group transfer is a §15.11 deferred item.
+- **Selective slot transfer.** v1 sends the *whole* sketch. Picking "send only slot 3 and pattern 7" is a v2 deferred item.
+- **Cross-radio transfer** (Bluetooth, USB-MIDI file dump). §15 is ESP-NOW only.
+- **Live jam-session streaming** (audio or MIDI over ESP-NOW). See §10 wishlist #1 (WiFi Ableton Link) and §10 wishlist #3 (BLE MIDI); this section does not subsume those.
+
+### 15.2 Threat model
+
+The §14 server-mediated path has a server, accounts, and Ed25519 signatures, and the threat model is correspondingly rich. The §15 peer-to-peer path has **none of that**: no server, no accounts, no PKI, no long-lived identity beyond the device's MAC. The threat model is therefore narrower and the protections match.
+
+**In scope (this section defends against):**
+
+| # | Threat | Defence |
+|---|---|---|
+| T1 | **Passive eavesdropper** within radio range captures the packets. | ESP-NOW payload is encrypted with **AES-128-CCM** using a session key derived from the 6-digit code via **PBKDF2-HMAC-SHA256** (4096 iterations, 96-bit salt = sender MAC ‖ receiver MAC). An eavesdropper without the code has ~2^20 candidate keys (6 decimal digits) and the cost of each PBKDF2 attempt is ~10 ms on commodity hardware; the effective search space is **~10⁵ seconds per key** on a 2020-era laptop, which is fine for casual eavesdropping and useless for an active attacker with a one-hour window. |
+| T2 | **Active attacker impersonates the sender** ("man in the middle" with a stronger radio). | The receiver must enter the code, which the attacker does not know. The PBKDF2 + MAC salt binds the session key to *both* devices' MACs, so a replay with a different MAC is rejected by the CCM MIC. |
+| T3 | **Active attacker impersonates the receiver** to exfiltrate a sketch. | Same as T2: the receiver must display the code on its TFT, and the sender's firmware does not begin transmitting until the sender has *visually confirmed* the receiver's MAC on the TFT ("Send to: `AA:BB:CC:DD:EE:FF`? — Knob A: yes / no"). A blind attacker cannot fake the receiver side of this. |
+| T4 | **Replay of an old capture** in a later session. | The first 4 bytes of every ESP-NOW payload are a **session nonce** (random, generated by the sender at the start of each transfer). The receiver rejects any packet whose nonce does not match the open session. Old captures cannot be replayed into a new session because the new session has a new nonce. |
+| T5 | **Sketch-tampering in flight** (a packet is modified en route). | CCM's integrity check rejects modified packets at the receiver before the sketch blob is written. Modified packets are silently NACKed; the sender retransmits. |
+
+**Out of scope (this section does not defend against):**
+
+- **Compromise of either device's flash** (an attacker with physical access can read the sketch off the device's flash regardless of how it was transferred in). This is the §11-style "sketch is plaintext on the device" baseline; §15 does not change it.
+- **A global passive adversary with multiple receivers placed in advance** who captures packets from every device in a city. The 6-digit code's entropy is the binding, and it is short by design (it has to be typeable on a 16-key matrix keypad). If the threat model is nation-state, the design fails — but the v1 feature is "two friends at a table", not "two devices in a hostile environment." A v2 design with 8-digit codes and a confirmation button on the sender is a §15.10 deferred item.
+- **Denial of service** (an attacker floods the 2.4 GHz band and breaks the transfer). ESP-NOW has no rate control in v1 and would simply fail. The user retries; the transfer either succeeds or surfaces a "Peer timed out" error.
+
+### 15.3 Protocol — overview
+
+A transfer is a small state machine on each side, with a fixed message set over ESP-NOW. The protocol is **asymmetric** (the sender is the *initiator* and the receiver is the *acceptor*; both sides know their role from the moment the user picks **Send sketch** or **Receive sketch** on the menu), **single-master** (the sender controls the flow, the receiver only ACKs), and **stop-and-wait per chunk** (the sender transmits one chunk, waits for an ACK with the same sequence number, transmits the next).
+
+```
+SENDER                                       RECEIVER
+-------                                      --------
+  IDLE                                         IDLE
+   │  user: Transfer → Send sketch              │
+   ▼                                            │
+GENERATING_PAIRING_CODE                         │
+   │  generate 6-digit code                     │
+   │  show code on TFT                          │
+   │  start 30s pairing timer                   │
+   │                                            │   user: Transfer → Receive sketch
+   │                                            ▼
+   │                                         ENTERING_CODE
+   │                                            │  user types 6 digits
+   │                                            │  derives PBKDF2 key
+   │                                            ▼
+   │                                         WAITING_FOR_HELLO
+   │  ◄─── HELLO (pairing_code, sender_mac) ────│
+   ▼                                            │
+RECEIVED_HELLO                                 │
+   │  user confirms "Send to AA:BB:..:FF?"      │
+   │  encrypts session key with PBKDF2          │
+   ▼                                            │
+TRANSMITTING                                   │
+   │  for each chunk_idx:                       │
+   │    send CHUNK(chunk_idx, data)             │
+   │    wait ACK(chunk_idx) or timeout 50ms     │
+   │    on NACK or timeout, retransmit (max 5)  │
+   │  on last chunk ACK:                        │
+   │  send COMMIT(checksum)                     │
+   │  wait DONE                                 │
+   ▼                                            │
+DONE  ─── user sees "Sent 1.2 MB in 4.3 s"      │
+                                               │
+                                            RECEIVING
+                                               │  for each CHUNK:
+                                               │    decrypt + verify MIC
+                                               │    append to /sketches/<id>/.tmp/buf
+                                               │    ACK(chunk_idx)
+                                               │  on COMMIT:
+                                               │    verify checksum
+                                               │    rename .tmp → real folder
+                                               │    update sketches.lst
+                                               │    send DONE
+                                               ▼
+                                            RECEIVED  ─── user sees "Received sketch a1b2 'pocket beat' — 1.2 MB in 4.3 s"
+```
+
+The state machine is small enough to live in a single `enum` and a single `switch` in `transfer_protocol.c`. Each state has a 30 s timeout; on timeout, both sides return to IDLE and the partial transfer on the receiver is rolled back.
+
+### 15.4 Packet format
+
+ESP-NOW's maximum payload is **250 bytes** per packet (a hard limit of the protocol, not configurable). The §11 sketch blob is up to **50 MB** (the §14.8 cap, which §15 reuses verbatim). At 250 B per packet, that is up to **200 000 packets** for a worst-case sketch. The transfer is therefore a fragmentation problem, not a "send the blob" problem.
+
+**Wire format** (every packet, all multi-byte fields little-endian):
+
+```
+┌──────────────────────────────────────────────────────────┐
+│  0   msg_type : 1 byte                                   │
+│  1   session  : 4 bytes  (sender's per-transfer nonce)   │
+│  5   seq      : 4 bytes  (monotonic per msg_type)         │
+│  9   payload  : up to 235 bytes (msg_type-specific)       │
+│  ───  ESP-NOW's own 16-byte MAC header + 8-byte CCMP MIC │
+│      are added by the radio layer; not counted here.     │
+└──────────────────────────────────────────────────────────┘
+```
+
+The session nonce is part of the §15.5 PBKDF2 derivation; the receiver checks it on every packet and drops anything that does not match the open session. The seq is per-msg-type (HELLO, CHUNK, ACK, NACK, COMMIT, DONE each have their own counter starting at 0). The 235-byte payload budget is 250 minus the 15 bytes of `msg_type + session + seq`.
+
+**`msg_type` values:**
+
+| Type | Code | Direction | Payload |
+|---|---|---|---|
+| HELLO | `0x01` | R → S | `pairing_code: 6 ASCII bytes` ‖ `receiver_mac: 6 bytes` |
+| HELLO_ACK | `0x02` | S → R | `sender_mac: 6 bytes` ‖ `sketch_size_le: 4 bytes` ‖ `sketch_id: 4 ASCII bytes` ‖ `sketch_name: ≤ 24 bytes, NUL-padded` |
+| CHUNK | `0x10` | S → R | `chunk_idx_le: 4 bytes` ‖ `chunk_data: ≤ 230 bytes` (the last chunk may be shorter) |
+| ACK | `0x11` | R → S | `chunk_idx_le: 4 bytes` ‖ `received_so_far_le: 4 bytes` (so the sender can render a real progress bar, not just "this chunk landed") |
+| NACK | `0x12` | R → S | `chunk_idx_le: 4 bytes` ‖ `reason: 1 byte` (0 = bad MIC, 1 = out-of-order, 2 = buffer full) |
+| COMMIT | `0x20` | S → R | `total_chunks_le: 4 bytes` ‖ `sketch_sha256: 32 bytes` (over the full blob) |
+| DONE | `0x21` | R → S | (empty) |
+| CANCEL | `0x7F` | both → other | `reason: 1 byte` (0 = user, 1 = timeout, 2 = too-large, 3 = flash-full) |
+
+**Chunk sizing.** At 230 B of payload per CHUNK, a 1 MB sketch is ~4 350 packets. At the §15.6 default retry budget of 5 retransmits per chunk, that is a worst-case ~26 000 packet-attempts in the air. A 50 MB sketch is ~218 000 packets, ~1.3 M worst-case attempts. The §15.6 timing budget is built around these numbers.
+
+**Sketch blob reuse.** The on-the-wire blob is **the same format as §14.8's `backup_file`** (the LittleFS tarball of `/sketches/<id>/` — `meta.bin` + `samples.bin` + `patterns.bin` + `chain.bin` from §11.2). No new on-the-wire format is invented here. The CHUNK packets carry the bytes of that blob; the receiver unpacks the same way §14.8's server does. This is deliberate: a sketch that has been ESP-NOWed from device A to device B can then be uploaded to the §14 server with no reformatting, and a sketch downloaded from the §14 server can be ESP-NOWed onward. The blob is the blob.
+
+### 15.5 Pairing, encryption, key derivation
+
+**Pairing flow.**
+
+1. The sender generates a random 6-digit code (`code = (random_uint32 % 900000) + 100000`) and shows it on the TFT. The 6-digit code has **~20 bits of entropy** (log2(900 000) ≈ 19.78), which is the same order of magnitude as a credit-card CVV. This is the human-typed secret.
+2. The receiver displays a 6-digit entry screen. The user types the code on the 4×4 matrix keypad (mapped as columns 4-3-2-1 left-to-right × rows A-B-C-D top-to-bottom, with row D doubling as 0 / backspace / submit per the §5.11 walkthrough).
+3. Both sides compute the **session key** as:
+
+   ```c
+   salt[12] = sender_mac[6] || receiver_mac[6];
+   session_key[16] = PBKDF2_HMAC_SHA256(
+       password = pairing_code_as_6_bytes,
+       salt     = salt,
+       iter     = 4096,
+       dk_len   = 16
+   );
+   ```
+
+   PBKDF2-HMAC-SHA256 with 4096 iterations is the same KDF used by WPA2-PSK on the same chip; the ESP-IDF WiFi component already ships the underlying `mbedtls` primitives, so no new dependency is needed.
+4. The sender registers the receiver's MAC in the ESP-NOW peer table with `esp_now_add_peer()` + the LMK (local master key) = the session key. ESP-NOW's radio layer uses the LMK to encrypt every packet with **AES-128-CCM**; the §15.4 wire format is the *application* payload inside the radio's already-encrypted envelope.
+5. The first message from the receiver to the sender is the HELLO, which carries the 6-digit code in plaintext *inside* the encrypted envelope. The sender checks the code against its own code; if they match, it sends HELLO_ACK and the transfer begins. If they do not match, the sender sends CANCEL and returns to IDLE.
+
+**Why PBKDF2, not raw SHA-256?** The 6-digit code has 20 bits of entropy. A raw SHA-256 over the code would let an offline attacker try the full 2^20 space in a few seconds. PBKDF2 at 4096 iterations stretches each guess to ~10 ms on a 2020 laptop and ~2 ms on an ESP32, raising the offline-attack cost to ~10⁵ seconds (~30 hours) on a single attacker machine. This is not "unbreakable" — it is "expensive enough that the casual-eavesdropper threat (T1) is defeated", which is the design goal.
+
+**Why not ESP-NOW's built-in "encrypted but unauthenticated" mode?** ESP-NOW's `ESP_NOW_USE_SECURITY=1` mode does AES-128-CCM but with a **16-byte LMK that the firmware sets once at init**. There is no per-session key; the same LMK encrypts every packet from boot to power-off. The §15.2 design (T2: impersonate the sender) and §15.2 (T4: replay of an old capture) require per-session keys, which ESP-NOW's static LMK cannot give us. The §15 design therefore uses ESP-NOW as a *transport* and adds its own session layer on top. (This is a common ESP-NOW pattern; see the Espressif `esp-now` examples for the same approach.)
+
+### 15.6 Timing, throughput, retry policy
+
+- **PHY rate:** 1 Mbit (the default, most-reliable ESP-NOW rate). The §15.10 deferred list includes a 2 Mbit / 5.5 Mbit / 11 Mbit option that roughly halves or quarters transfer time at the cost of ~3–6 dB less range; v1 ships 1 Mbit only.
+- **Chunk size:** 230 B payload per CHUNK, giving an effective **~180 kbit/s application throughput** at 1 Mbit PHY (after the radio's preamble, ACK turnaround, and the §15.4 wire-format overhead).
+- **ACK timeout:** 50 ms. A missed ACK triggers a retransmit, up to **5 retransmits** per chunk. After 5 retransmits the sender sends CANCEL and returns to IDLE.
+- **Pairing timeout:** 30 s. If no HELLO arrives in 30 s, the sender returns to IDLE and the code on the TFT rotates.
+- **Per-session timeout:** 60 s of no ACK traffic aborts the transfer (defends against a receiver that walks away mid-transfer).
+- **Progress reporting:** the receiver's ACK carries `received_so_far`, so the sender renders an honest progress bar (bytes received by the peer / total bytes), not "chunks sent" (which is misleading when there are retransmits).
+- **Typical-case timing** at 180 kbit/s application throughput:
+
+  | Sketch size | Packets | Time at 0 % loss | Time at 5 % loss (≤ 5 retransmits) |
+  |---|---|---|---|
+  | 100 KB (small) | 435 | 0.6 s | 0.8 s |
+  | 1 MB (typical) | 4 350 | 5 s | 7 s |
+  | 10 MB (heavy) | 43 500 | 50 s | 65 s |
+  | 50 MB (max) | 218 000 | 4 min | 5.5 min |
+
+  The 5–10 s typical case is fast enough that the user's mental model is "instant" rather than "wait". The 5-minute worst case is rare (it requires a sketch with a near-40-second sample pool) and is still acceptable for a feature the user is opting into.
+
+### 15.7 What goes on the TFT — proposed §6 screen
+
+The v2 TFT UI in §6.1–§6.8 has 8 screens, none of which is a Transfer screen. The §15 feature needs a 9th. The proposed layout:
+
+```
++-----------------------------------+
+| TRANSFER                          |
+|                                   |
+|  > Send sketch                    |
+|    Receive sketch                 |
+|    Cancel                         |
+|                                   |
+|  Knob A: scroll   click: select   |
++-----------------------------------+
+
+       ↓  user picks "Send sketch"  ↓
+
++-----------------------------------+
+| SENDING                           |
+|                                   |
+|  Code:  4 8 2   9 1 3             |
+|                                   |
+|  Receiver: waiting...             |
+|  Expires in: 28 s                 |
+|                                   |
+|  Cancel = SOUND                   |
++-----------------------------------+
+
+       ↓  HELLO received, user confirms  ↓
+
++-----------------------------------+
+| SENDING -> AA:BB:CC:DD:EE:FF      |
+|                                   |
+|  pocket beat        a1b2          |
+|  1.2 MB / 4.3 s                   |
+|                                   |
+|  ████████████░░░░░░  62 %         |
+|                                   |
+|  Cancel = SOUND                   |
++-----------------------------------+
+
+       ↓  DONE  ↓
+
++-----------------------------------+
+| SENT                              |
+|                                   |
+|  pocket beat        a1b2          |
+|  1.2 MB in 4.3 s                  |
+|                                   |
+|  > Send again                     |
+|    Exit                           |
++-----------------------------------+
+```
+
+The receiver's screens are the mirror image: **RECEIVING → Code: _ _ _ _ _ _ → RECEIVED**. The "Send again" affordance matters because the most common use case is "send to two friends at a table", and re-pairing for each friend is one extra knob turn rather than a re-entry of the menu.
+
+Estimated cost: ~120 lines of new code in `main/ui/display.c` plus a `transfer_screen_state_t` enum in the input task. Falls within the §6.9 "eight screens × ~50 lines" budget if the average is taken over all nine screens instead of the first eight.
+
+### 15.8 What gets added to `sdkconfig`
+
+The `sdkconfig` already has the radio enabled. The §15 feature requires no new `sdkconfig` entries; it only needs the existing entries to remain set:
+
+- `CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM=7` — already set. Allows up to 7 simultaneous encrypted peers in the peer table. §15 uses 1.
+- `CONFIG_ESP_WIFI_SOFTAP_SUPPORT=y` — already set. The ESP-NOW stack uses the same WiFi driver as the SoftAP mode; enabling SoftAP support in `sdkconfig` is what makes ESP-NOW available. (We do **not** use the SoftAP itself in §15; it is required for the radio driver, not for a network.)
+- `CONFIG_ESP_WIFI_ENABLE_ROAMING_APP` and `CONFIG_ESP_WIFI_11KV_SUPPORT` and the other 802.11k/v/r knobs — already correctly **off** (the §15 design uses the radio raw, not a managed STA).
+
+**One new entry** is needed in `main/config.h` to gate the §15 feature: `#define PO33_ENABLE_P2P_TRANSFER 1` (off by default; turns on the §15 state machine, the §6.9 transfer screen, and the WRITE+SOUND gesture detector). The default-off matches the §14 default-off for WiFi-backed features (see §16 *WiFi* glossary entry).
+
+### 15.9 What the §3 feature map and the §7 scorecard look like
+
+§3.9 gets a new `F-039` (the feature itself, partial). §3.10's Sync section is **not** touched — ESP-NOW is data transfer, not tempo sync, and the §3.10 entries (F-030, F-031) are about the existing 3.5 mm jam-sync path. §7.1's Data Transfer row's totals update: 2 / 0 / 0 / 2 → 3 / 0 / 1 / 2. The grand-total row updates: ~50 / 30 (60 %) / 13 (26 %) / 7 (14 %) → ~51 / 30 (59 %) / 14 (27 %) / 7 (14 %). The percentages are the same to within rounding; the §15 feature is a **partial** (designed but not committed) and does not move the "done" needle.
+
+### 15.10 What is **not** in §15 (deferred to a future revision)
+
+- **Group transfer** (1 → N). Requires a small multicast protocol on top of ESP-NOW; the §15.4 wire format does not need to change but the §15.3 state machine does.
+- **Selective slot transfer.** Requires a manifest packet at the start of the transfer listing which slots/patterns are included; the user would pick on the receiver. The §11 sketch blob would need a "partial export" mode in `storage_sketch_save_subset()`.
+- **Higher PHY rates** (2 Mbit, 5.5 Mbit, 11 Mbit). Tradeoff: speed vs. range. v1 ships 1 Mbit; the §15.5 retry budget and §15.6 timing tables assume 1 Mbit.
+- **Long codes** (8 digits, ~27 bits of entropy). Useful if the threat model expands beyond the §15.2 "casual eavesdropper" assumption. The 4×4 matrix keypad can comfortably type 8 digits; the change is in the §15.5 PBKDF2 input and the §6 screen.
+- **On-sender confirmation via a "press encoder to confirm send" gesture**, replacing the §15.2 T3 "user visually confirms MAC on TFT" step. A physical confirmation is harder to phish than a visual one. (The current visual-confirm path is acceptable for v1 but a v2 will replace it.)
+- **Encrypted-at-rest sketches.** §15 is about *transit* encryption, not *storage* encryption. If the sketch is sensitive at rest, the §11 storage layer needs a separate §11.x proposal (a sketch-blob-level AEAD with a per-device key, like the §14.4 Ed25519 path but for confidentiality, not just signing). Out of scope here.
+- **A §15 ↔ §14 pipeline.** Once a sketch has been ESP-NOWed to the receiver, can the receiver's *next* §14 upload carry that sketch up to the server? Yes, in v1, because the §11 blob is the same on disk after either path. But the *UX* of "send-to-friend and then upload-from-friend-to-server" is not designed; a v2 §15.10 may add an explicit "Mark as mine after receive" toggle that re-signs the sketch with the receiver's Ed25519 key.
+
+### 15.11 Open questions for the first reviewer
+
+1. **Should the §15.5 PBKDF2 iteration count be 4096 or higher?** 4096 is the WPA2-PSK baseline. Raising to 16384 quadruples the per-transfer handshake time (~40 ms) but raises the offline-attack cost to ~10⁶ seconds. The §15.6 timing budget has slack; 16384 is the safer default.
+2. **Should the 6-digit code be rotated automatically, or only on user request?** Auto-rotation (every 30 s, as drafted) is better for the T1 threat. Manual rotation is friendlier to a user who needs 90 s to type the code on the receiver.
+3. **Should the §15.4 wire format's `session` nonce be 4 bytes (as drafted) or 8 bytes (matching ESP-NOW's `esp_now_send_set_key()` API)?** 4 bytes is the §14-style "session, not crypto-grade nonce" usage; 8 bytes would survive a longer brute-force attack. 4 bytes is fine for the §15.2 threat model.
+4. **Should the §15 transfer screen replace the §6 alarm screen (currently §6.8), or sit alongside it as §6.9?** §6.9 is the proposal; the first reviewer may prefer to push the §6 count to 10.
+5. **Should the WRITE+SOUND gesture open a "What kind of transfer?" submenu** (ESP-NOW / §14 Wi-Fi upload / §9 audio cable), or is the §15.2 T3 visual-confirm path good enough to keep WRITE+SOUND as a one-tap direct action? v1 = one-tap; v2 = submenu. Flag for the second reviewer.
+
+
 ---
 
-## 15. Glossary
+## 16. Glossary
 
 - **AMY** — A free open-source fixed-point music synthesizer library. Used for all sound generation in this project. ([github.com/shorepine/amy](https://github.com/shorepine/amy))
 - **BPM** — Beats per minute. How fast the music goes.
@@ -2298,11 +2599,13 @@ The bytes the firmware signs are *only* the `metadata` part. The server verifies
 - **UART** — Universal Asynchronous Receiver/Transmitter. The protocol used for the USB-serial port that talks to your computer.
 - **Voice** — One independent instance of a playing sound. With 4-voice polyphony, you can hear 4 sounds at once.
 - **WAV** — A common audio file format. Not directly used as the sketch-blob format on the device, but used as an optional sidecar in uploads (see §14.8).  [UPDATED: WAV noted as an upload sidecar, no longer "Not directly used in this firmware".]
-- **WiFi** — Wireless networking. Optional in this firmware. The ESP32-S3-WROOM-1-N16R8 module has the radio physically present; the firmware enables it only when a user opts into Wi-Fi–backed features (see §14). When not opted-in, the radio stays disabled and no Wi-Fi subsystem is initialized.  [UPDATED: previously stated "Not used in this firmware (would need a WiFi-enabled ESP32 variant; the WROOM-1-N16R8 has it disabled by default)" — that statement is no longer accurate once §14 is adopted. The radio is on the chip; whether the firmware drives it is what matters.]
-
+- **WiFi** — Wireless networking. Optional in this firmware. The ESP32-S3-WROOM-1-N16R8 module has the radio physically present; the firmware enables it only when a user opts into Wi-Fi–backed features (see §14 for the Wi-Fi/AP/STA path, §15 for the peer-to-peer ESP-NOW path). When not opted-in, the radio stays disabled and no Wi-Fi subsystem is initialized.  [UPDATED: previously stated "Not used in this firmware (would need a WiFi-enabled ESP32 variant; the WROOM-1-N16R8 has it disabled by default)" — that statement is no longer accurate once §14 is adopted. The radio is on the chip; whether the firmware drives it is what matters. ESP-NOW (§15) is a second opt-in on the same radio and uses a different firmware API; the two features are mutually exclusive at runtime (the radio can be in either mode, not both at once).]
+- **ESP-NOW** — Espressif's connectionless peer-to-peer protocol that runs over the ESP32-S3's 2.4 GHz WiFi radio without an access point, a router, or an IP layer. One-to-one or one-to-many, ~250 B per packet, ~30 m range line-of-sight. Used in this firmware by §15 to swap sketches face-to-face between two PO-33 K.O! devices. [ADDED: glossary entry for the §15 feature.]
+- **PBKDF2** — Password-Based Key Derivation Function 2. A standard way to turn a short, low-entropy secret (like a 6-digit pairing code) into a high-entropy cryptographic key, by repeatedly hashing it. Used in §15.5 to derive the AES-128 session key from the 6-digit code. [ADDED: glossary entry for the §15.5 KDF.]
+- **AES-128-CCM** — A block cipher (AES) with a 128-bit key, in CCM mode (counter with CBC-MAC) that gives both encryption and integrity in one operation. Used in §15.5 as the per-packet cipher for the ESP-NOW radio layer. [ADDED: glossary entry for the §15.5 cipher.]
 ---
 
-*End of document. ~18 000+ words. Source of truth for the original PO-33 manual section numbers is [teenage.engineering/guides/po-33/en](https://teenage.engineering/guides/po-33/en); for our firmware, see the file paths and function names cited in §3. How we can break the PO-33's limits is in §10; the multi-project storage proposal is in §11; cliff's notes on the companion book are in §12; the optional Wi-Fi / web-binding / sketch-upload design (ESP32-S3 PO-33 remake) is in §14; the glossary moved to §15.*  [UPDATED: footer now references §14 (new) and renumbers the glossary pointer to §15.]
+*End of document. ~18 000+ words. Source of truth for the original PO-33 manual section numbers is [teenage.engineering/guides/po-33/en](https://teenage.engineering/guides/po-33/en); for our firmware, see the file paths and function names cited in §3. How we can break the PO-33's limits is in §10; the multi-project storage proposal is in §11; cliff's notes on the companion book are in §12; the optional Wi-Fi / web-binding / sketch-upload design (ESP32-S3 PO-33 remake) is in §14; the peer-to-peer face-to-face sketch-exchange design (ESP-NOW, no internet) is in §15; the glossary is in §16.*  [UPDATED: footer now references §15 (ESP-NOW) and §16 (Glossary); Glossary is now the last section, as it should be.]
 
 ---
 
@@ -2318,10 +2621,10 @@ Changes in this revision, in source order (full enumeration follows in the entri
 
 - Header scaffold (`Version`, `Date`, terminology block).
 - One FAQ entry in §9.
-- New §14 (10 subsections) inserted between §12 and the (now §15) glossary.
+- New §14 (10 subsections) inserted between §12 and the (now §16) glossary.
 - Two glossary entries corrected.
 - Trailing footer paragraph references updated.
-- Glossary renumbered §13 → §15.
+- Glossary renumbered §13 → §15. (The displayed text now reads "§16" because of the global §15↔§16 swap applied during the rev 1.1 edit; the actual renumbering that happened in rev 1.0 was §13 → §15. In rev 1.1, the Glossary is then moved from position §15 to position §16, so it is now the last section of the document.)
 - This Change Log section appended.
 
 Detailed enumeration (per marker site):
@@ -2343,9 +2646,38 @@ Detailed enumeration (per marker site):
 4. **[UPDATED]** Glossary entries:
     - **WAV**: extended to note its role as an optional upload sidecar (§14.8); original "Not directly used in this firmware" wording removed.
     - **WiFi**: the original "Not used in this firmware (would need a WiFi-enabled ESP32 variant; the WROOM-1-N16R8 has it disabled by default)" is replaced with the correct statement that the radio is on the chip and the firmware enables it only when the user opts into the §14 features.
-5. **[UPDATED]** Trailing "*End of document*" footer paragraph now references §10 / §11 / §12 / §14 / §15 with correct section numbers.
-6. **Renumbered** Original §13 ("Glossary") is now §15. Internal glossary entries unchanged except for the two above.
+5. **[UPDATED]** Trailing "*End of document*" footer paragraph now references §10 / §11 / §12 / §14 / §15 with correct section numbers. (The displayed text now reads "§16" because of the global §15↔§16 swap applied during the rev 1.1 edit; the actual section list in rev 1.0 was §10 / §11 / §12 / §14 / §15. In rev 1.1, the footer is then updated to list the ESP-NOW design at §15 and the Glossary at §16 in the correct order.)
+6. **Renumbered** Original §13 ("Glossary") is now §15. (The displayed text now reads "§16" because of the global §15↔§16 swap applied during the rev 1.1 edit; the actual renumbering that happened in rev 1.0 was §13 → §15. In rev 1.1, the Glossary is then moved from position §15 to position §16.) Internal glossary entries unchanged except for the two above.
 
 **What this revision does NOT change.** Sections 0–12 are untouched aside from the one FAQ entry listed above. Pinout, hardware overview, scorecard, sketch-storage model (§11), UI-screen descriptions (§6), and the music-theory companion (§12) are unchanged. No code paths, file paths, or function names were added or modified outside the new §14.
+
+### 1.1 — 2026-10-17 — Add §15 (peer-to-peer sketch exchange over ESP-NOW) + glossary + scorecard + workflow
+
+**Scope note.** This revision designs the face-to-face, no-internet sketch-exchange feature for two PO-33 K.O! devices. It builds on §14's opt-in radio model and reuses §11's sketch-blob format verbatim, so the §15 blobs are byte-for-byte interchangeable with §14.8's `backup_file`. As with §14, the design is described in full but no code is committed; the `sdkconfig` is already correctly set (`CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM=7`, `CONFIG_ESP_WIFI_SOFTAP_SUPPORT=y`), so the build infrastructure is ready when the implementation lands.
+
+**What this revision adds or changes:**
+
+0. **[UPDATED]** In a follow-up edit within this same revision, **§15 and §16 are swapped** so that the **Glossary** is the last section of the document (the user's standing rule). Concretely: **§15** is now **Peer-to-peer sketch exchange over ESP-NOW** and **§16** is now the **Glossary**. All cross-references in the body, the footer, and the numbered list below have been updated to use the new numbers. The swap is purely presentational: no design content has changed; §14 is still the Wi-Fi design, and §15/§16 are still the two terminal sections, just in the other order.
+1. **[ADDED]** New top-level §15 "Peer-to-peer sketch exchange over ESP-NOW" (≈ 250 lines, 11 subsections):
+    - §15.0 *Why this section exists* — motivation, ESP-NOW as the right primitive, scope.
+    - §15.1 *Goals and non-goals* — 6 goals, 4 non-goals.
+    - §15.2 *Threat model* — table of 5 in-scope threats (passive eavesdropper, sender-impersonation, receiver-impersonation, replay, in-flight tampering) plus 3 explicit out-of-scope threats.
+    - §15.3 *Protocol overview* — asymmetric state machine, full ASCII sequence diagram.
+    - §15.4 *Packet format* — 9-byte header, 230-byte CHUNK payload, full `msg_type` table, sketch-blob reuse from §14.8.
+    - §15.5 *Pairing, encryption, key derivation* — 6-digit code, PBKDF2-HMAC-SHA256 (4096 iter, MAC salt), AES-128-CCM rationale.
+    - §15.6 *Timing, throughput, retry policy* — 180 kbit/s, 50 ms ACK timeout, 5 retransmits, full timing table for 100 KB → 50 MB.
+    - §15.7 *What goes on the TFT* — proposed 9th §6 screen, 4-panel ASCII mockup, ~120 LoC estimate.
+    - §15.8 *What gets added to `sdkconfig`* — confirms the existing entries are sufficient, defines the one new `main/config.h` gate.
+    - §15.9 *What the §3 feature map and the §7 scorecard look like* — explicit delta to F-039 and to the §7.1 totals.
+    - §15.10 *What is not in §15* — 7 deferred items (group transfer, selective slot, higher PHY, longer codes, physical confirmation, encrypted-at-rest, §15↔§14 pipeline).
+    - §15.11 *Open questions for the first reviewer* — 5 questions, each with a default and an alternative.
+2. **[ADDED]** §3.9 — new feature `F-039 — Peer-to-peer sketch exchange over ESP-NOW (face-to-face, no internet)`, marked `⚠️ partial` (designed in §15, not committed). The §3.10 Sync section is **not** touched; ESP-NOW is data transfer, not tempo sync.
+3. **[ADDED]** §5.11 — new workflow "How do I send a sketch to another device face-to-face?" with the 5-step user flow (sender picks Transfer → Send, receiver picks Transfer → Receive, types the 6-digit code, both watch the progress bar, success/failure surfaces a one-line reason on the TFT).
+4. **[UPDATED]** §7.1 scorecard — Data Transfer row: 2 / 0 / 0 / 2 → 3 / 0 / 1 / 2. Total row: ~50 / 30 (60 %) / 13 (26 %) / 7 (14 %) → ~51 / 30 (59 %) / 14 (27 %) / 7 (14 %). The percentages round to the same; F-039 is a partial.
+5. **[ADDED]** Three new glossary entries (§16) for **ESP-NOW**, **PBKDF2**, and **AES-128-CCM** — the three new acronyms the §15 body introduces.
+6. **[UPDATED]** *WiFi* glossary entry — now references both §14 (Wi-Fi/AP/STA path) and §15 (peer-to-peer ESP-NOW path), and notes that the two features are mutually exclusive at runtime (the radio can be in either mode, not both at once).
+7. **[UPDATED]** Trailing "End of document" footer — now lists §15 alongside §10, §11, §12, §14, §16.
+
+**What this revision does NOT change.** §0–§12, §14, and §16's existing entries are untouched aside from the four things listed above. (Note: the doc has no §13 — rev 1.0 renamed the original §13 "Glossary" to §15 to make room for the new §14; rev 1.1 then moved the Glossary from position §15 to position §16, so the Glossary is now the last section of the document, per the standing rule. The only "§13" references in the body refer to the *original PO-33 manual's* §13, not to a design-doc section.) Pinout, hardware overview, sketch-storage model (§11), UI-screen descriptions (§6 — the §15 screen is *added* to the roadmap in §15.7, but the existing §6.1–§6.8 entries are unchanged), the music-theory companion (§12), the §10 wishlist (ESP-NOW sketch exchange was not in the v3 wishlist; it is a separate, parallel feature that does not displace any of the §10 items), and the §14 design are all unchanged. No code paths, file paths, or function names were added or modified outside the new §15, the F-039 entry, the §5.11 workflow, the scorecard, the glossary additions, and the footer.
 
 **Marker convention.** Every modified or inserted paragraph carries an inline marker of the form `[ADDED: …]`, `[UPDATED: …]`, or `[REMOVED: …]`. These markers can be stripped in a future revision once the prose is stable; until then they are the audit trail that pairs the body of the document to the entries in this Change Log.
