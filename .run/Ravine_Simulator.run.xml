@@ -22,9 +22,8 @@
           Escape                          quit
 
       The "host-simulator" CMake profile is created from the
-      "host-simulator" preset, which the repository ships in
-      sim/CMakePresets.json (also included by the root
-      CMakePresets.json).
+      "host-simulator" preset, which the repository ships in the
+      root CMakePresets.json.
     -->
     <ExecutionTarget>
       <option name="id" value="CMakeBuildProfile:host-simulator" />
