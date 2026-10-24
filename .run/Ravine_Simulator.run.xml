@@ -1,0 +1,50 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Ravine Simulator" type="CMakeRunConfiguration" factoryName="Application">
+    <!--
+      Runs the SDL2 host simulator of the Ravine Phoenix HAL.
+
+      CMake profile: host-simulator
+          Source directory: <project>          (the project root)
+          Build directory:   <project>/build-sim
+          Generator:         Ninja
+          Options:           -DSYNTH_BUILD_SIMULATOR=ON
+      CMake configuration: Debug
+      CMake target:        ravine_sim
+
+      The simulator opens a 240x320 panel window scaled 3x on the host
+      display, and maps the PC keyboard onto the device keypad:
+
+          1 Q W E R / A S D F / Z X C V   the 4x4 matrix keys
+          G H J K L T Y                   the modifier buttons
+          mouse wheel                     Knob A
+          left / right arrows             Knob B
+          up / down arrows                rotary encoder
+          Escape                          quit
+
+      The "host-simulator" CMake profile is created from the
+      "host-simulator" preset, which the repository ships in
+      sim/CMakePresets.json (also included by the root
+      CMakePresets.json).
+    -->
+    <ExecutionTarget>
+      <option name="id" value="CMakeBuildProfile:host-simulator" />
+      <option name="profileName" value="host-simulator" />
+    </ExecutionTarget>
+    <CMakeSettings>
+      <option name="buildProfileName" value="host-simulator" />
+      <option name="configurationName" value="Debug" />
+      <option name="PROJECT_NAME" value="ravine_sim" />
+      <option name="TARGET_NAME" value="ravine_sim" />
+      <option name="EXPLICIT_BUILD_TARGET_NAME" value="ravine_sim" />
+    </CMakeSettings>
+    <BuildAndRunConfigurations>
+      <BuildAndRunConfiguration name="ravine_sim" selected="true">
+        <Target name="ravine_sim" />
+        <option name="runExecutable" value="true" />
+      </BuildAndRunConfiguration>
+    </BuildAndRunConfigurations>
+    <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+    <option name="EMULATE_TERMINAL" value="false" />
+    <method v="2" />
+  </configuration>
+</component>

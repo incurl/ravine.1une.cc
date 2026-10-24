@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "cmakeMinimumRequired": {
     "major": 3,
     "minor": 24,
@@ -50,12 +50,19 @@
     {
       "name": "default",
       "configurePreset": "default",
-      "targets": ["all"]
+      "targets": [
+        "all"
+      ]
     },
     {
       "name": "release",
       "configurePreset": "release",
-      "targets": ["all"]
+      "targets": [
+        "all"
+      ]
     }
+  ],
+  "include": [
+    "sim/CMakePresets.json"
   ]
 }

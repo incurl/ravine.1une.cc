@@ -12,14 +12,32 @@
 # boards/ and common/ are compiled into both targets, and each backend
 # directory contributes exactly one implementation per target.
 #
-# Usage:
-#   cmake --preset host-simulator
-#   cmake --build --preset host-simulator
-#   ./build-sim/ravine_sim --selftest
+# This file is reached in two ways:
+#
+#   1. As a subdirectory of the repository root, with
+#      SYNTH_BUILD_SIMULATOR=ON. That is what CLion does, because a
+#      CLion CMake profile always uses the project root as its source
+#      directory and has no source-directory field of its own.
+#
+#   2. Directly, via the "host-simulator" CMake preset in this
+#      directory's CMakePresets.json:
+#
+#         cmake --preset host-simulator
+#         cmake --build --preset host-simulator
+#         ./build-sim/ravine_sim --selftest
+#
+# The preset is also included by the repository-root CMakePresets.json,
+# so `cmake --list-presets` shows the firmware and the simulator side
+# by side.
 #
 cmake_minimum_required(VERSION 3.16)
 
-project(ravine_sim C)
+# When included from the root, the root has already called project().
+# When configured directly, this file is the project root and has to
+# call project() itself.
+if(NOT PROJECT_NAME)
+    project(ravine_sim C)
+endif()
 
 set(CMAKE_C_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -45,8 +63,18 @@ add_compile_definitions(_GNU_SOURCE)
 #
 # The HAL lives at the repository top level, outside this directory, so
 # that both the firmware and the simulator can use it.
+#
+# When this file is configured directly (its own CMake project root) the
+# repository root is its parent. When it is included from the
+# repository root, CMAKE_CURRENT_SOURCE_DIR is the sim/ subdirectory
+# and the repository root is still its parent. Either way the parent
+# is the repository root.
 # ---------------------------------------------------------------------------
 get_filename_component(SIM_PROJECT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/.." ABSOLUTE)
+
+# The build output always lands in <repository root>/build-sim, whichever
+# directory the configuration was started from.
+set(SIM_BINARY_DIR "${SIM_PROJECT_ROOT}/build-sim")
 
 # ---------------------------------------------------------------------------
 # Sources
@@ -106,7 +134,10 @@ target_link_libraries(ravine_sim PRIVATE Threads::Threads)
 
 # ---------------------------------------------------------------------------
 # Output
+#
+# Always <repository root>/build-sim, so the binary is at the same
+# path no matter which directory the configuration was started from.
 # ---------------------------------------------------------------------------
 set_target_properties(ravine_sim PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY "${SIM_PROJECT_ROOT}/build-sim"
+    RUNTIME_OUTPUT_DIRECTORY "${SIM_BINARY_DIR}"
 )

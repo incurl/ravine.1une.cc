@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "cmakeMinimumRequired": {
     "major": 3,
     "minor": 24,
@@ -9,12 +9,14 @@
     {
       "name": "host-simulator",
       "displayName": "Host simulator (SDL2)",
-      "description": "Native Linux build of the Ravine Phoenix HAL for the desktop simulator. Compiles the shared HAL sources (hal/, boards/, common/) together with the SDL2 backends in src/backend_sim/, and links SDL2 for the window/input and OpenSSL for TLS and Ed25519. Completely separate from the ESP-IDF firmware build: this preset has its own source directory (sim/) and binary directory (build-sim/), and the firmware presets in the repository-root CMakePresets.json are unaffected.",
+      "description": "Native Linux build of the Ravine Phoenix HAL for the desktop simulator. Compiles the shared HAL sources (hal/, boards/, common/) together with the SDL2 backends in src/backend_sim/, and links SDL2 for the window/input and OpenSSL for TLS and Ed25519. Completely separate from the ESP-IDF firmware build: this preset has its own source directory (sim/) and binary directory (build-sim/), and the firmware presets in the repository-root CMakePresets.json are unaffected. Also listed in the root CMakePresets.json via an \"include\", so CLion offers it in the same CMake profile list as the firmware targets.",
       "generator": "Ninja",
-      "binaryDir": "${sourceDir}/../build-sim",
+      "binaryDir": "${sourceDir}/build-sim",
       "cacheVariables": {
+        "SYNTH_BUILD_SIMULATOR": "ON",
         "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_C_STANDARD": "17"
+        "CMAKE_C_STANDARD": "17",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
       }
     },
     {
