@@ -14,6 +14,7 @@
 #define PO33_DISPLAY_H
 
 #include "esp_err.h"
+#include "esp_lcd_panel_ops.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -22,6 +23,24 @@ extern "C" {
 esp_err_t display_init(void);
 void      display_show_boot_screen(void);
 void      display_tick(void);
+
+/* ─── HAL accessors ───────────────────────────────────────────────
+ *
+ * These expose the panel and framebuffer that display.c already owns,
+ * so that the HAL display backend (src/backend_esp32/
+ * hal_display_esp32.c) can drive the *existing* driver instead of
+ * initialising a second panel on the same SPI bus.
+ *
+ * display_fb() returns the RGB565 framebuffer in PSRAM, or NULL if
+ * display_init() has not run. The buffer is owned by display.c: do
+ * not free or replace it.
+ *
+ * display_panel() returns the esp_lcd panel handle, or NULL before
+ * display_init(). The handle is owned by display.c and is only valid
+ * for the lifetime of the driver.
+ */
+uint16_t *display_fb(void);
+esp_lcd_panel_handle_t display_panel(void);
 
 /* F-022 display-half: briefly show the current volume level on the
  * TFT. The indicator persists for ~1.2 s and then fades back to the

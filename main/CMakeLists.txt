@@ -21,6 +21,7 @@ idf_component_register(
         esp_timer
         nvs_flash
         esp_lcd_ili9341
+        synth_hal
     EMBED_FILES
     REQUIRES
 )

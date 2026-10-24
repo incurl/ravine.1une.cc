@@ -99,6 +99,23 @@ static void fb_flush(void)
     esp_lcd_panel_draw_bitmap(s_panel, 0, 0, TFT_WIDTH, TFT_HEIGHT, s_fb);
 }
 
+/* ─── HAL accessors ───────────────────────────────────────────────
+ *
+ * The HAL display backend drives the panel and framebuffer that this
+ * module already owns, rather than creating a second one. These two
+ * accessors are the entire coupling point between the legacy driver
+ * and the HAL; nothing else about display.c is changed.
+ */
+uint16_t *display_fb(void)
+{
+    return s_fb;
+}
+
+esp_lcd_panel_handle_t display_panel(void)
+{
+    return s_panel;
+}
+
 static void backlight_init(void)
 {
     ledc_timer_config_t tcfg = {

@@ -113,3 +113,7 @@ docs/Music_Theory_for_Electronic_Music_Pro.md
 # Accidental build artifacts: an unexpanded ${sourceDir} shell variable in an
 # idf.py/cmake invocation creates a literal directory with that name.
 ${sourceDir}/
+
+# Host simulator build output and its emulated flash storage.
+build-sim/
+sim_flash/
