@@ -230,6 +230,8 @@ static void consume_events(sim_stats_t *st)
 {
     hal_input_event_t ev;
     while (hal_input_pop(&ev)) {
+        HAL_LOG_DEBUG(TAG, "input event: type=%d key=%u value=%d",
+                      (int)ev.type, (unsigned)ev.key_id, (int)ev.value);
         switch (ev.type) {
         case HAL_INPUT_KEY_PRESS:
             st->presses++;
@@ -349,6 +351,42 @@ static void test_display(void)
           "backlight >100 rejected");
 }
 
+/* Push a synthetic key event into SDL's queue, so the input backend can
+ * be exercised without a real keyboard. */
+static void push_key_event(SDL_Scancode sc, bool down)
+{
+    SDL_Event ev;
+    memset(&ev, 0, sizeof(ev));
+    ev.type                = down ? SDL_KEYDOWN : SDL_KEYUP;
+    ev.key.type            = ev.type;
+    ev.key.state           = down ? SDL_PRESSED : SDL_RELEASED;
+    ev.key.repeat          = 0;
+    ev.key.keysym.scancode = sc;
+    SDL_PushEvent(&ev);
+}
+
+/* Push a synthetic mouse-wheel event (Knob A). */
+static void push_wheel_event(int y)
+{
+    SDL_Event ev;
+    memset(&ev, 0, sizeof(ev));
+    ev.type             = SDL_MOUSEWHEEL;
+    ev.wheel.type       = ev.type;
+    ev.wheel.x          = 0;
+    ev.wheel.y          = y;
+    ev.wheel.direction  = SDL_MOUSEWHEEL_NORMAL;
+    SDL_PushEvent(&ev);
+}
+
+/* Push a synthetic window-close event. */
+static void push_quit_event(void)
+{
+    SDL_Event ev;
+    memset(&ev, 0, sizeof(ev));
+    ev.type = SDL_QUIT;
+    SDL_PushEvent(&ev);
+}
+
 static void test_input(void)
 {
     printf("input:\n");
@@ -360,6 +398,88 @@ static void test_input(void)
     hal_input_tick();
     CHECK(hal_input_pending() == 0, "tick with no SDL events adds nothing");
 
+    /* Zeroed so that a failed pop leaves no indeterminate fields behind
+     * for the checks below to read. */
+    hal_input_event_t ev = { 0 };
+    bool got = false;
+
+    /* A matrix key press carries its matrix coordinates. */
+    push_key_event(SDL_SCANCODE_1, true);
+    hal_input_tick();
+    CHECK(hal_input_pending() == 1, "matrix key press queued");
+    got = hal_input_pop(&ev);
+    CHECK(got, "matrix key press popped");
+    CHECK(ev.type == HAL_INPUT_KEY_PRESS, "event is a key press");
+    CHECK(ev.key_id == SYNTH_KEY_STEP1, "pressed key is matrix key 1");
+    CHECK(ev.row == 0 && ev.column == 0, "matrix key 1 is at row 0, column 0");
+    CHECK(hal_input_is_pressed(SYNTH_KEY_STEP1), "key reports as held");
+
+    /* ... and the release ends the hold. */
+    push_key_event(SDL_SCANCODE_1, false);
+    hal_input_tick();
+    got = hal_input_pop(&ev);
+    CHECK(got, "matrix key release popped");
+    CHECK(ev.type == HAL_INPUT_KEY_RELEASE, "event is a key release");
+    CHECK(ev.key_id == SYNTH_KEY_STEP1, "released key is matrix key 1");
+    CHECK(!hal_input_is_pressed(SYNTH_KEY_STEP1), "key no longer held");
+
+    /* A dedicated button is not on the matrix, so it has no coordinates. */
+    push_key_event(SDL_SCANCODE_G, true);
+    hal_input_tick();
+    got = hal_input_pop(&ev);
+    CHECK(got, "modifier key press popped");
+    CHECK(ev.type == HAL_INPUT_KEY_PRESS, "event is a key press");
+    CHECK(ev.key_id == SYNTH_KEY_BTN_SOUND, "pressed key is the SOUND button");
+    CHECK(ev.row == SYNTH_COORD_NONE && ev.column == SYNTH_COORD_NONE,
+          "dedicated button has no matrix coordinates");
+    push_key_event(SDL_SCANCODE_G, false);
+    hal_input_tick();
+    CHECK(hal_input_pop(&ev), "modifier key release popped");
+    CHECK(hal_input_pending() == 0, "no leftover events");
+
+    /* The left/right arrows drive Knob B. */
+    push_key_event(SDL_SCANCODE_RIGHT, true);
+    hal_input_tick();
+    got = hal_input_pop(&ev);
+    CHECK(got, "arrow key event popped");
+    CHECK(ev.type == HAL_INPUT_KNOB_DELTA, "right arrow is a knob delta");
+    CHECK(ev.key_id == SYNTH_KNOB_B, "right arrow drives Knob B");
+    CHECK(ev.value > 0, "right arrow turns Knob B up");
+
+    /* The up/down arrows drive the rotary encoder. */
+    push_key_event(SDL_SCANCODE_UP, true);
+    hal_input_tick();
+    got = hal_input_pop(&ev);
+    CHECK(got, "encoder event popped");
+    CHECK(ev.type == HAL_INPUT_ENCODER_DELTA, "up arrow is an encoder delta");
+    CHECK(ev.value == 1, "up arrow advances the encoder by one detent");
+
+    /* The mouse wheel drives Knob A. */
+    push_wheel_event(1);
+    hal_input_tick();
+    got = hal_input_pop(&ev);
+    CHECK(got, "wheel event popped");
+    CHECK(ev.type == HAL_INPUT_KNOB_DELTA, "wheel is a knob delta");
+    CHECK(ev.key_id == SYNTH_KNOB_A, "wheel drives Knob A");
+
+    /* Escape is the host's quit gesture. */
+    CHECK(!hal_input_quit_requested(), "no quit requested yet");
+    push_key_event(SDL_SCANCODE_ESCAPE, true);
+    hal_input_tick();
+    CHECK(hal_input_quit_requested(), "escape requests a quit");
+
+    /* Closing the window does the same, and a fresh session starts clean. */
+    CHECK(hal_input_deinit() == SYS_OK, "deinit");
+    CHECK(hal_input_init() == SYS_OK, "re-init");
+    CHECK(!hal_input_quit_requested(), "quit flag cleared on re-init");
+    push_quit_event();
+    hal_input_tick();
+    CHECK(hal_input_quit_requested(), "window close requests a quit");
+
+    /* A flush drops everything that is still queued. */
+    push_key_event(SDL_SCANCODE_2, true);
+    hal_input_tick();
+    CHECK(hal_input_pending() == 1, "queued event present before flush");
     hal_input_flush();
     CHECK(hal_input_pending() == 0, "flush empties the queue");
 }
@@ -520,19 +640,50 @@ int main(int argc, char **argv)
 
     hal_log_init();
 
+    /* Optional log-level override for the simulator, so a developer can
+     * see the input events without rebuilding:
+     *
+     *     RAVINE_SIM_LOG=debug ./ravine_sim
+     *
+     * Accepted values: debug, verbose, none. Anything else is ignored
+     * and the default (info) level is kept. */
+    const char *log_level = getenv("RAVINE_SIM_LOG");
+    if (log_level != NULL) {
+        if (strcmp(log_level, "debug") == 0) {
+            hal_log_set_level(HAL_LOG_LEVEL_DEBUG);
+        } else if (strcmp(log_level, "verbose") == 0) {
+            hal_log_set_level(HAL_LOG_LEVEL_VERBOSE);
+        } else if (strcmp(log_level, "none") == 0) {
+            hal_log_set_level(HAL_LOG_LEVEL_NONE);
+        }
+    }
+
     sys_status_t st = hal_display_init();
     if (st != SYS_OK) {
         fprintf(stderr, "display init failed: %s\n", sys_status_str(st));
         return 1;
     }
 
+    /* The input backend owns the SDL event queue, so it has to be
+     * initialised here — the display backend only brings up the video
+     * subsystem. Without this the tick below is a no-op, no key press
+     * is ever read and the quit gesture is never seen. */
+    st = hal_input_init();
+    if (st != SYS_OK) {
+        fprintf(stderr, "input init failed: %s\n", sys_status_str(st));
+        hal_display_deinit();
+        return 1;
+    }
+
     if (selftest) {
         int rc = run_selftest();
+        hal_input_deinit();
         hal_display_deinit();
         return rc;
     }
 
     int rc = run_interactive();
+    hal_input_deinit();
     hal_display_deinit();
     return rc;
 }

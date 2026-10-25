@@ -15,9 +15,12 @@
  *
  * The seven dedicated buttons have their own keys:
  *
- *      SOUND   = Q          PATTERN = W        BPM = E
- *      REC     = R          FX      = A        PLAY = S
- *      WRITE   = D
+ *      SOUND   = G          PATTERN = H        BPM = J
+ *      REC     = K          FX      = L        PLAY = T
+ *      WRITE   = Y
+ *
+ * These are deliberately disjoint from the matrix rows above, so every
+ * key on the PC keyboard maps to exactly one logical key.
  *
  * The two knobs are driven with the mouse wheel (Knob A) and the left
  * / right arrow keys (Knob B), and the rotary encoder with the up /
@@ -165,6 +168,10 @@ sys_status_t hal_input_init(void)
     memset(s_holding, 0, sizeof(s_holding));
     memset(s_keymap_set, 0, sizeof(s_keymap_set));
     build_keymap();
+
+    /* A previous session may have asked to quit; a fresh one starts
+     * clean. */
+    s_quit_requested = false;
 
     s_initialised = true;
     HAL_LOG_INFO(TAG, "input HAL ready: keyboard mapped to %d keys",
